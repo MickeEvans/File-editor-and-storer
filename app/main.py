@@ -1,0 +1,102 @@
+"""FastAPI app: serves the static frontend and the file-backbone API.
+
+API (Phase 1):
+  GET  /api/tree          — recursive folder tree of the workspace
+  GET  /api/file?path=... — one file's raw contents
+  GET  /api/files         — what the SQLite index currently holds
+  POST /api/scan          — re-sync disk -> files table
+"""
+
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from .config import PROJECT_ROOT, WORKSPACE_ROOT, file_type
+from .database import FileRecord, SessionLocal, init_db
+from .scanner import IGNORED_DIRS, scan_workspace
+
+STATIC_DIR = PROJECT_ROOT / "static"
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    WORKSPACE_ROOT.mkdir(parents=True, exist_ok=True)
+    init_db()
+    scan_workspace()
+    yield
+
+
+app = FastAPI(title="Workspace", lifespan=lifespan)
+
+
+def resolve_in_workspace(rel_path: str) -> Path:
+    """Resolve a client-supplied relative path, rejecting anything that
+    escapes the workspace root (e.g. ../../secrets)."""
+    target = (WORKSPACE_ROOT / rel_path).resolve()
+    if target != WORKSPACE_ROOT and WORKSPACE_ROOT not in target.parents:
+        raise HTTPException(status_code=400, detail="Path escapes workspace root")
+    return target
+
+
+def build_tree(directory: Path) -> list[dict]:
+    entries = []
+    for path in sorted(directory.iterdir(), key=lambda p: (p.is_file(), p.name.lower())):
+        if path.name in IGNORED_DIRS:
+            continue
+        rel = path.relative_to(WORKSPACE_ROOT).as_posix()
+        if path.is_dir():
+            entries.append(
+                {"name": path.name, "path": rel, "kind": "folder", "children": build_tree(path)}
+            )
+        else:
+            entries.append(
+                {"name": path.name, "path": rel, "kind": "file", "type": file_type(path)}
+            )
+    return entries
+
+
+@app.get("/api/tree")
+def get_tree():
+    return {"root": str(WORKSPACE_ROOT), "tree": build_tree(WORKSPACE_ROOT)}
+
+
+@app.get("/api/file")
+def get_file(path: str = Query(..., description="Path relative to the workspace root")):
+    target = resolve_in_workspace(path)
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail=f"No such file: {path}")
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=415, detail="Not a text file")
+    return {
+        "path": target.relative_to(WORKSPACE_ROOT).as_posix(),
+        "type": file_type(target),
+        "content": content,
+    }
+
+
+@app.get("/api/files")
+def list_indexed_files():
+    session = SessionLocal()
+    try:
+        records = session.query(FileRecord).order_by(FileRecord.path).all()
+        return {"files": [r.as_dict() for r in records]}
+    finally:
+        session.close()
+
+
+@app.post("/api/scan")
+def rescan():
+    return scan_workspace()
+
+
+@app.get("/")
+def index():
+    return FileResponse(STATIC_DIR / "index.html")
+
+
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

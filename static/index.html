@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div id="sidebar-header">
+        <span id="workspace-name">Workspace</span>
+        <button id="rescan-btn" title="Re-scan workspace into the index">&#x21bb;</button>
+      </div>
+      <nav id="tree"></nav>
+    </aside>
+
+    <main id="main">
+      <div id="tabbar">
+        <span id="current-file" class="placeholder">No file open</span>
+        <span id="current-type"></span>
+      </div>
+      <div id="content">
+        <div id="empty-state">
+          <h1>Unified Workspace</h1>
+          <p>Notes &middot; Slides &middot; Data — pick a file on the left.</p>
+        </div>
+        <pre id="viewer" hidden></pre>
+      </div>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
