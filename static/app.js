@@ -1,22 +1,33 @@
-// Frontend: folder tree in the sidebar; main pane shows a raw viewer for
-// most files and a full Markdown editor (EasyMDE, side-by-side preview)
-// for .md files. Phase 2a.
+// Frontend. Markdown -> EasyMDE with side-by-side preview.
+// HTML -> text editor with a Code/Preview toggle (sandboxed iframe).
+// CSV -> text editor with a Text/Grid toggle (editable table).
+// Everything else -> plain text editor. All views save back to disk.
 
 const treeEl = document.getElementById("tree");
-const viewerEl = document.getElementById("viewer");
 const editorPaneEl = document.getElementById("editor-pane");
+const textEditorEl = document.getElementById("text-editor");
+const htmlPreviewEl = document.getElementById("html-preview");
+const gridPaneEl = document.getElementById("grid-pane");
+const csvGridEl = document.getElementById("csv-grid");
 const emptyStateEl = document.getElementById("empty-state");
 const currentFileEl = document.getElementById("current-file");
 const currentTypeEl = document.getElementById("current-type");
 const dirtyDotEl = document.getElementById("dirty-dot");
 const saveBtn = document.getElementById("save-btn");
 const rescanBtn = document.getElementById("rescan-btn");
+const addFileBtn = document.getElementById("add-file-btn");
+const viewToggleEl = document.getElementById("view-toggle");
+const toggleABtn = document.getElementById("toggle-a");
+const toggleBBtn = document.getElementById("toggle-b");
 
 let activeItem = null;
-let openPath = null;      // path of the file in the editor (null = raw view / nothing)
-let savedContent = "";    // last content known to be on disk
+let openPath = null;       // file currently open (null = nothing)
+let openType = null;       // markdown | slides | data | other
+let savedContent = "";     // last content known to be on disk
 let dirty = false;
 let easyMDE = null;
+let currentView = null;    // code | preview | text | grid (non-markdown only)
+let csvRows = [];          // grid model while the grid view is active
 
 async function api(path, options) {
   const res = await fetch(path, options);
@@ -59,6 +70,7 @@ function renderFolder(node) {
 function renderFile(node) {
   const item = document.createElement("div");
   item.className = "tree-item file";
+  item.dataset.path = node.path;
   item.innerHTML =
     `<span class="twisty"></span><span>${node.name}</span>` +
     `<span class="badge ${node.type}">${node.type}</span>`;
@@ -80,12 +92,12 @@ async function loadTree() {
   }
 }
 
-// ---------- Opening files ----------
+// ---------- Panes & views ----------
 
-function showPane(pane) {
-  emptyStateEl.hidden = pane !== "empty";
-  viewerEl.hidden = pane !== "viewer";
-  editorPaneEl.hidden = pane !== "editor";
+const PANES = { empty: emptyStateEl, editor: editorPaneEl, text: textEditorEl, preview: htmlPreviewEl, grid: gridPaneEl };
+
+function showPane(name) {
+  for (const [key, el] of Object.entries(PANES)) el.hidden = key !== name;
 }
 
 function setTab(path, type) {
@@ -94,6 +106,55 @@ function setTab(path, type) {
   currentTypeEl.textContent = type;
 }
 
+// The two views the toggle switches between, per file type.
+const TOGGLE_CONFIG = {
+  slides: { labels: ["Code", "Preview"], views: ["code", "preview"] },
+  data: { labels: ["Text", "Grid"], views: ["text", "grid"] },
+};
+
+function configureToggle(type) {
+  const config = TOGGLE_CONFIG[type];
+  viewToggleEl.hidden = !config;
+  if (!config) return;
+  toggleABtn.textContent = config.labels[0];
+  toggleBBtn.textContent = config.labels[1];
+}
+
+function setView(view) {
+  const config = TOGGLE_CONFIG[openType];
+  currentView = view;
+
+  if (config) {
+    const second = view === config.views[1];
+    viewToggleEl.classList.toggle("second", second);
+    toggleABtn.classList.toggle("active", !second);
+    toggleBBtn.classList.toggle("active", second);
+  }
+
+  if (view === "preview") {
+    htmlPreviewEl.srcdoc = textEditorEl.value; // reflects unsaved edits too
+    showPane("preview");
+  } else if (view === "grid") {
+    csvRows = parseCSV(textEditorEl.value);
+    renderGrid(csvRows);
+    showPane("grid");
+  } else {
+    showPane("text");
+    textEditorEl.focus();
+  }
+}
+
+toggleABtn.addEventListener("click", () => {
+  const config = TOGGLE_CONFIG[openType];
+  if (config && currentView !== config.views[0]) setView(config.views[0]);
+});
+toggleBBtn.addEventListener("click", () => {
+  const config = TOGGLE_CONFIG[openType];
+  if (config && currentView !== config.views[1]) setView(config.views[1]);
+});
+
+// ---------- Opening files ----------
+
 async function openFile(node, item) {
   if (dirty && !confirm("You have unsaved changes. Discard them?")) return;
 
@@ -101,8 +162,10 @@ async function openFile(node, item) {
   try {
     data = await api(`/api/file?path=${encodeURIComponent(node.path)}`);
   } catch (err) {
-    showPane("viewer");
-    viewerEl.textContent = `Could not open ${node.path}: ${err.message}`;
+    showPane("text");
+    viewToggleEl.hidden = true;
+    saveBtn.hidden = true;
+    textEditorEl.value = `Could not open ${node.path}: ${err.message}`;
     return;
   }
 
@@ -110,15 +173,22 @@ async function openFile(node, item) {
   item.classList.add("active");
   activeItem = item;
   setTab(data.path, data.type);
+
+  openPath = null; // silence change listeners while swapping content
+  openType = data.type;
+  savedContent = data.content;
   setDirty(false);
+  saveBtn.hidden = false;
+  saveBtn.disabled = true;
 
   if (data.type === "markdown") {
+    viewToggleEl.hidden = true;
     openMarkdown(data);
   } else {
-    openPath = null;
-    saveBtn.hidden = true;
-    showPane("viewer");
-    viewerEl.textContent = data.content;
+    textEditorEl.value = data.content;
+    configureToggle(data.type);
+    openPath = data.path;
+    setView(TOGGLE_CONFIG[data.type] ? TOGGLE_CONFIG[data.type].views[0] : "text");
   }
 }
 
@@ -152,17 +222,78 @@ function ensureEditor() {
 function openMarkdown(data) {
   showPane("editor");
   const editor = ensureEditor();
-  openPath = null; // silence the change listener while we swap content
   editor.value(data.content);
-  savedContent = data.content;
   openPath = data.path;
-  saveBtn.hidden = false;
-  saveBtn.disabled = true;
-  // Live preview alongside the editor, on by default.
   if (!editor.isSideBySideActive()) editor.toggleSideBySide();
   editor.codemirror.refresh();
   editor.codemirror.focus();
 }
+
+// ---------- Plain text editing ----------
+
+textEditorEl.addEventListener("input", () => {
+  if (openPath !== null) setDirty(textEditorEl.value !== savedContent);
+});
+
+// ---------- CSV grid ----------
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [];
+  let field = "";
+  let inQuotes = false;
+  const src = text.replace(/\r\n?/g, "\n");
+
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (src[i + 1] === '"') { field += '"'; i++; }
+        else inQuotes = false;
+      } else field += ch;
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === ",") {
+      row.push(field); field = "";
+    } else if (ch === "\n") {
+      row.push(field); field = "";
+      rows.push(row); row = [];
+    } else field += ch;
+  }
+  if (field !== "" || row.length > 0) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+function serializeCSV(rows) {
+  const quote = (v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  return rows.map((r) => r.map(quote).join(",")).join("\n") + "\n";
+}
+
+function renderGrid(rows) {
+  csvGridEl.innerHTML = "";
+  rows.forEach((cells, r) => {
+    const tr = document.createElement("tr");
+    cells.forEach((value, c) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      td.contentEditable = "true";
+      td.dataset.r = r;
+      td.dataset.c = c;
+      tr.appendChild(td);
+    });
+    csvGridEl.appendChild(tr);
+  });
+}
+
+csvGridEl.addEventListener("input", (e) => {
+  const td = e.target.closest("td");
+  if (!td) return;
+  csvRows[td.dataset.r][td.dataset.c] = td.textContent;
+  textEditorEl.value = serializeCSV(csvRows);
+  if (openPath !== null) setDirty(textEditorEl.value !== savedContent);
+});
+
+// ---------- Saving ----------
 
 function setDirty(value) {
   dirty = value;
@@ -170,9 +301,13 @@ function setDirty(value) {
   saveBtn.disabled = !value;
 }
 
+function currentContent() {
+  return openType === "markdown" ? easyMDE.value() : textEditorEl.value;
+}
+
 async function saveCurrentFile() {
   if (!openPath || !dirty) return;
-  const content = easyMDE.value();
+  const content = currentContent();
   saveBtn.disabled = true;
   saveBtn.textContent = "Saving…";
   try {
@@ -202,6 +337,35 @@ document.addEventListener("keydown", (e) => {
 
 window.addEventListener("beforeunload", (e) => {
   if (dirty) e.preventDefault();
+});
+
+// ---------- New file ----------
+
+addFileBtn.addEventListener("click", async () => {
+  const path = prompt(
+    "New file path (relative to the workspace root):\n" +
+    "e.g.  notes/idea.md   slides/deck.html   data/table.csv",
+    "untitled.md"
+  );
+  if (!path || !path.trim()) return;
+  try {
+    const created = await api("/api/file", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        path: path.trim(),
+        content: "",
+        create_parents: true,
+        overwrite: false,
+      }),
+    });
+    await loadTree();
+    const item = [...document.querySelectorAll(".tree-item.file")]
+      .find((i) => i.dataset.path === created.path);
+    if (item) item.click();
+  } catch (err) {
+    alert(`Could not create file: ${err.message}`);
+  }
 });
 
 // ---------- Rescan ----------

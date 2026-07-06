@@ -23,8 +23,8 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] DB: **SQLite** via SQLAlchemy (single file, zero-config)
 - [ ] Frontend: plain JS, with libraries for the editors:
   - [x] Markdown → CodeMirror or EasyMDE (EasyMDE, vendored in static/vendor)
-  - [ ] Slides → **reveal.js**
-  - [ ] Data → grid library (Handsontable or AG Grid)
+  - [ ] Slides → **reveal.js** (v1: sandboxed iframe preview instead; reveal.js still to come)
+  - [x] Data → grid library (v1: lightweight custom grid, no library; revisit if it outgrows it)
 
 ---
 
@@ -55,17 +55,21 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] Re-sync `files` table on save
 
 ### 2b. Data tab (CSV — view/edit only)
-- [ ] Wire in the grid library
-- [ ] Load a `.csv` into the grid (read)
-- [ ] Edit cells in the grid
-- [ ] Save the grid back to the `.csv` file
+- [x] Text/Grid switch in the tab bar (raw CSV ↔ grid with separated cells)
+- [x] Load a `.csv` into the grid (read)
+- [x] Edit cells in the grid (contenteditable, proper CSV quoting on save)
+- [x] Save the grid back to the `.csv` file
 - [ ] (Deferred to a later version: formula evaluation)
 
 ### 2c. Slides tab (HTML)
 - [ ] Wire in reveal.js
-- [ ] Render an `.html` file as a slideshow
-- [ ] Edit the underlying source
-- [ ] Preview updates after edit + save
+- [x] Code/Preview switch in the tab bar (source ↔ sandboxed iframe render)
+- [x] Edit the underlying source
+- [x] Preview updates after edit + save (preview reflects unsaved edits too)
+
+### 2d. Extras
+- [x] "New file" button in the sidebar (creates parents, refuses overwrite, opens the file)
+- [x] Plain-text editing + save for any other text file
 
 ## Phase 3 — Agent v1 (simple)
 

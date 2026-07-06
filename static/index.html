@@ -13,7 +13,10 @@
     <aside id="sidebar">
       <div id="sidebar-header">
         <span id="workspace-name">Workspace</span>
-        <button id="rescan-btn" title="Re-scan workspace into the index">&#x21bb;</button>
+        <span id="sidebar-actions">
+          <button id="add-file-btn" title="New file">&#65291;</button>
+          <button id="rescan-btn" title="Re-scan workspace into the index">&#x21bb;</button>
+        </span>
       </div>
       <nav id="tree"></nav>
     </aside>
@@ -23,16 +26,27 @@
         <span id="current-file" class="placeholder">No file open</span>
         <span id="current-type"></span>
         <span id="dirty-dot" hidden title="Unsaved changes">&#9679;</span>
-        <button id="save-btn" hidden>Save</button>
+        <div id="tabbar-right">
+          <div id="view-toggle" hidden>
+            <span id="toggle-thumb"></span>
+            <button id="toggle-a" class="active"></button>
+            <button id="toggle-b"></button>
+          </div>
+          <button id="save-btn" hidden>Save</button>
+        </div>
       </div>
       <div id="content">
         <div id="empty-state">
           <h1>Unified Workspace</h1>
           <p>Notes &middot; Slides &middot; Data — pick a file on the left.</p>
         </div>
-        <pre id="viewer" hidden></pre>
         <div id="editor-pane" hidden>
           <textarea id="md-textarea"></textarea>
+        </div>
+        <textarea id="text-editor" hidden spellcheck="false"></textarea>
+        <iframe id="html-preview" hidden sandbox="allow-scripts"></iframe>
+        <div id="grid-pane" hidden>
+          <table id="csv-grid"></table>
         </div>
       </div>
     </main>

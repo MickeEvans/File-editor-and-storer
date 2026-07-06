@@ -52,7 +52,9 @@ html, body {
   font-weight: 600;
 }
 
-#rescan-btn {
+#sidebar-actions { display: flex; gap: 6px; }
+
+#rescan-btn, #add-file-btn {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-dim);
@@ -61,7 +63,7 @@ html, body {
   padding: 2px 8px;
   font-size: 14px;
 }
-#rescan-btn:hover { color: var(--text); background: var(--bg-hover); }
+#rescan-btn:hover, #add-file-btn:hover { color: var(--text); background: var(--bg-hover); }
 
 #tree {
   overflow-y: auto;
@@ -130,8 +132,49 @@ html, body {
 
 #dirty-dot { color: var(--accent); font-size: 12px; }
 
-#save-btn {
+#tabbar-right {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Segmented switch with a sliding thumb (Code/Preview, Text/Grid) */
+#view-toggle {
+  position: relative;
+  display: flex;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px;
+}
+#view-toggle button {
+  position: relative;
+  z-index: 1;
+  width: 82px;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  padding: 3px 0;
+  cursor: pointer;
+  font-size: 13px;
+  transition: color 0.18s ease;
+}
+#view-toggle button.active { color: #fff; }
+#toggle-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 82px;
+  height: calc(100% - 4px);
+  background: var(--bg-active);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  transition: transform 0.18s ease;
+}
+#view-toggle.second #toggle-thumb { transform: translateX(82px); }
+
+#save-btn {
   background: var(--accent);
   border: none;
   color: #0d1420;
@@ -162,15 +205,61 @@ html, body {
 }
 #empty-state h1 { font-weight: 300; margin: 0 0 8px; color: var(--text); }
 
-#viewer {
+/* Plain text editor for HTML / CSV / other text files */
+#text-editor {
+  display: block;
+  width: 100%;
+  height: 100%;
   margin: 0;
   padding: 16px 20px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: var(--bg);
+  color: var(--text);
   font-family: Consolas, "Cascadia Mono", monospace;
   font-size: 13px;
   line-height: 1.5;
-  white-space: pre-wrap;
-  word-break: break-word;
 }
+
+/* HTML preview */
+#html-preview {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #fff;
+}
+
+/* CSV grid */
+#grid-pane {
+  height: 100%;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+#csv-grid {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+#csv-grid td, #csv-grid th {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  min-width: 60px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+}
+#csv-grid td:focus, #csv-grid th:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  background: var(--bg-hover);
+}
+#csv-grid tr:first-child td {
+  background: var(--bg-panel);
+  font-weight: 600;
+  color: var(--accent);
+}
+#csv-grid tr:nth-child(even) td { background: var(--bg-panel); }
+#csv-grid tr:first-child td { background: var(--bg-active); }
 
 /* ---------- Markdown editor (EasyMDE dark theme) ---------- */
 

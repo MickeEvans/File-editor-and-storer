@@ -84,17 +84,23 @@ def get_file(path: str = Query(..., description="Path relative to the workspace 
 class FileWritePayload(BaseModel):
     path: str
     content: str
+    create_parents: bool = False  # make missing parent folders (used by "new file")
+    overwrite: bool = True        # set False to refuse clobbering an existing file
 
 
 @app.put("/api/file")
 def save_file(payload: FileWritePayload):
-    """Write contents to a file inside the workspace, then re-sync the index.
-    Creates the file if it doesn't exist yet (the parent folder must)."""
+    """Write contents to a file inside the workspace, then re-sync the index."""
     target = resolve_in_workspace(payload.path)
     if target.is_dir():
         raise HTTPException(status_code=400, detail="Path is a folder")
+    if target.exists() and not payload.overwrite:
+        raise HTTPException(status_code=409, detail="File already exists")
     if not target.parent.is_dir():
-        raise HTTPException(status_code=404, detail="Parent folder does not exist")
+        if payload.create_parents:
+            target.parent.mkdir(parents=True, exist_ok=True)
+        else:
+            raise HTTPException(status_code=404, detail="Parent folder does not exist")
     target.write_text(payload.content, encoding="utf-8")
     scan_workspace()
     stat = target.stat()
