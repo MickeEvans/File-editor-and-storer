@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Workspace</title>
+  <link rel="stylesheet" href="/static/vendor/easymde.min.css">
+  <link rel="stylesheet" href="/static/vendor/font-awesome/css/font-awesome.min.css">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -20,6 +22,8 @@
       <div id="tabbar">
         <span id="current-file" class="placeholder">No file open</span>
         <span id="current-type"></span>
+        <span id="dirty-dot" hidden title="Unsaved changes">&#9679;</span>
+        <button id="save-btn" hidden>Save</button>
       </div>
       <div id="content">
         <div id="empty-state">
@@ -27,10 +31,14 @@
           <p>Notes &middot; Slides &middot; Data — pick a file on the left.</p>
         </div>
         <pre id="viewer" hidden></pre>
+        <div id="editor-pane" hidden>
+          <textarea id="md-textarea"></textarea>
+        </div>
       </div>
     </main>
   </div>
 
+  <script src="/static/vendor/easymde.min.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

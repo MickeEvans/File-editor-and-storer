@@ -22,7 +22,7 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] Backend: Python + **FastAPI**
 - [x] DB: **SQLite** via SQLAlchemy (single file, zero-config)
 - [ ] Frontend: plain JS, with libraries for the editors:
-  - [ ] Markdown → CodeMirror or EasyMDE
+  - [x] Markdown → CodeMirror or EasyMDE (EasyMDE, vendored in static/vendor)
   - [ ] Slides → **reveal.js**
   - [ ] Data → grid library (Handsontable or AG Grid)
 
@@ -48,11 +48,11 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 ## Phase 2 — The tabs (one editor at a time)
 
 ### 2a. Markdown tab (do first — easiest, highest value)
-- [ ] Wire in the markdown editor library
-- [ ] Live preview alongside the editor
-- [ ] Backend: endpoint to write/save file contents
-- [ ] Save edits back to the `.md` file on disk
-- [ ] Re-sync `files` table on save
+- [x] Wire in the markdown editor library
+- [x] Live preview alongside the editor
+- [x] Backend: endpoint to write/save file contents
+- [x] Save edits back to the `.md` file on disk
+- [x] Re-sync `files` table on save
 
 ### 2b. Data tab (CSV — view/edit only)
 - [ ] Wire in the grid library

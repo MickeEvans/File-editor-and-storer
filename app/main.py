@@ -1,8 +1,9 @@
 """FastAPI app: serves the static frontend and the file-backbone API.
 
-API (Phase 1):
+API:
   GET  /api/tree          — recursive folder tree of the workspace
   GET  /api/file?path=... — one file's raw contents
+  PUT  /api/file          — write a file's contents back to disk
   GET  /api/files         — what the SQLite index currently holds
   POST /api/scan          — re-sync disk -> files table
 """
@@ -11,6 +12,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Query
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -76,6 +78,31 @@ def get_file(path: str = Query(..., description="Path relative to the workspace 
         "path": target.relative_to(WORKSPACE_ROOT).as_posix(),
         "type": file_type(target),
         "content": content,
+    }
+
+
+class FileWritePayload(BaseModel):
+    path: str
+    content: str
+
+
+@app.put("/api/file")
+def save_file(payload: FileWritePayload):
+    """Write contents to a file inside the workspace, then re-sync the index.
+    Creates the file if it doesn't exist yet (the parent folder must)."""
+    target = resolve_in_workspace(payload.path)
+    if target.is_dir():
+        raise HTTPException(status_code=400, detail="Path is a folder")
+    if not target.parent.is_dir():
+        raise HTTPException(status_code=404, detail="Parent folder does not exist")
+    target.write_text(payload.content, encoding="utf-8")
+    scan_workspace()
+    stat = target.stat()
+    return {
+        "path": target.relative_to(WORKSPACE_ROOT).as_posix(),
+        "type": file_type(target),
+        "size": stat.st_size,
+        "modified": stat.st_mtime,
     }
 
 
