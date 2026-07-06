@@ -23,7 +23,7 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] DB: **SQLite** via SQLAlchemy (single file, zero-config)
 - [ ] Frontend: plain JS, with libraries for the editors:
   - [x] Markdown → CodeMirror or EasyMDE (EasyMDE, vendored in static/vendor)
-  - [ ] Slides → **reveal.js** (v1: sandboxed iframe preview instead; reveal.js still to come)
+  - [x] Slides → **reveal.js** (vendored; sections wrapped in a reveal scaffold at preview time)
   - [x] Data → grid library (v1: lightweight custom grid, no library; revisit if it outgrows it)
 
 ---
@@ -62,7 +62,8 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [ ] (Deferred to a later version: formula evaluation)
 
 ### 2c. Slides tab (HTML)
-- [ ] Wire in reveal.js
+- [x] Wire in reveal.js
+- [x] Render an `.html` file as a slideshow (files with `<section>` slides; plain HTML previews as-is)
 - [x] Code/Preview switch in the tab bar (source ↔ sandboxed iframe render)
 - [x] Edit the underlying source
 - [x] Preview updates after edit + save (preview reflects unsaved edits too)

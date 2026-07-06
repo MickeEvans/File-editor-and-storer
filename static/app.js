@@ -132,7 +132,7 @@ function setView(view) {
   }
 
   if (view === "preview") {
-    htmlPreviewEl.srcdoc = textEditorEl.value; // reflects unsaved edits too
+    htmlPreviewEl.srcdoc = buildPreviewDoc(textEditorEl.value); // reflects unsaved edits too
     showPane("preview");
   } else if (view === "grid") {
     csvRows = parseCSV(textEditorEl.value);
@@ -142,6 +142,34 @@ function setView(view) {
     showPane("text");
     textEditorEl.focus();
   }
+}
+
+// If the HTML file looks like a slide deck (has <section> slides), wrap the
+// slides in a reveal.js scaffold so the preview is a real stepped slideshow.
+// Anything else previews as the plain page it is.
+function buildPreviewDoc(source) {
+  const doc = new DOMParser().parseFromString(source, "text/html");
+  const slidesContainer = doc.querySelector(".reveal .slides, .slides");
+  const sections = slidesContainer
+    ? [...slidesContainer.children].filter((el) => el.tagName === "SECTION")
+    : [...doc.body.children].filter((el) => el.tagName === "SECTION");
+  if (sections.length === 0) return source;
+
+  const slidesHtml = sections.map((s) => s.outerHTML).join("\n");
+  return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="/static/vendor/reveal/reset.css">
+  <link rel="stylesheet" href="/static/vendor/reveal/reveal.css">
+  <link rel="stylesheet" href="/static/vendor/reveal/theme/black.css">
+</head>
+<body>
+  <div class="reveal"><div class="slides">${slidesHtml}</div></div>
+  <script src="/static/vendor/reveal/reveal.js"></script>
+  <script>Reveal.initialize({ hash: false, controls: true, progress: true });</script>
+</body>
+</html>`;
 }
 
 toggleABtn.addEventListener("click", () => {
