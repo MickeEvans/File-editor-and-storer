@@ -74,13 +74,13 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 
 ## Phase 3 — Agent v1 (simple)
 
-- [ ] Define an LLM-provider adapter interface (so the provider is swappable)
-- [ ] Implement one concrete provider behind the adapter
-- [ ] Chat panel in the UI
-- [ ] "Read the folder" = load every file's contents into the prompt context
-- [ ] Command: summarize the current folder
-- [ ] Command: answer questions about the folder's contents
-- [ ] Store chat history in SQLite
+- [x] Define an LLM-provider adapter interface (so the provider is swappable)
+- [x] Implement one concrete provider behind the adapter (Anthropic / Claude Opus 4.8; plus an offline `echo` provider for dev)
+- [x] Chat panel in the UI (Agent button in the tab bar; scoped to the open file's folder)
+- [x] "Read the folder" = load every file's contents into the prompt context (capped at ~200K chars until Phase 4)
+- [x] Command: summarize the current folder
+- [x] Command: answer questions about the folder's contents
+- [x] Store chat history in SQLite (`chat_messages` table, per folder)
 
 ## Phase 4 — Agent v2 (scale + editing)  [later]
 

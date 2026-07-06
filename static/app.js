@@ -209,6 +209,8 @@ async function openFile(node, item) {
   saveBtn.hidden = false;
   saveBtn.disabled = true;
 
+  if (!chatPanelEl.hidden) setChatScope(scopeOf(data.path));
+
   if (data.type === "markdown") {
     viewToggleEl.hidden = true;
     openMarkdown(data);
@@ -394,6 +396,124 @@ addFileBtn.addEventListener("click", async () => {
   } catch (err) {
     alert(`Could not create file: ${err.message}`);
   }
+});
+
+// ---------- Agent chat ----------
+
+const chatPanelEl = document.getElementById("chat-panel");
+const chatToggleBtn = document.getElementById("chat-toggle-btn");
+const chatMessagesEl = document.getElementById("chat-messages");
+const chatScopeEl = document.getElementById("chat-scope");
+const chatInputEl = document.getElementById("chat-input");
+const chatSendBtn = document.getElementById("chat-send-btn");
+const chatClearBtn = document.getElementById("chat-clear-btn");
+const chatSummarizeBtn = document.getElementById("chat-summarize-btn");
+
+let chatScope = "";      // folder the agent is scoped to ("" = workspace root)
+let chatBusy = false;
+
+function scopeOf(path) {
+  if (!path || !path.includes("/")) return "";
+  return path.slice(0, path.lastIndexOf("/"));
+}
+
+function scopeLabel(scope) {
+  return scope === "" ? "/" : scope + "/";
+}
+
+function addChatBubble(role, text) {
+  const empty = document.getElementById("chat-empty");
+  if (empty) empty.remove();
+  const div = document.createElement("div");
+  div.className = `chat-msg ${role}`;
+  div.textContent = text;
+  chatMessagesEl.appendChild(div);
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  return div;
+}
+
+function renderChatEmpty() {
+  chatMessagesEl.innerHTML =
+    '<div id="chat-empty">Ask the agent about the files in this folder — ' +
+    "it reads them all before answering.</div>";
+}
+
+async function setChatScope(scope) {
+  if (scope === chatScope && chatMessagesEl.childElementCount > 0) return;
+  chatScope = scope;
+  chatScopeEl.textContent = "Scope: " + scopeLabel(scope);
+  try {
+    const data = await api(`/api/chat?folder=${encodeURIComponent(scope)}`);
+    // Don't clobber the list if the user already started chatting meanwhile
+    if (chatBusy || chatScope !== scope) return;
+    chatMessagesEl.innerHTML = "";
+    if (data.messages.length === 0) {
+      renderChatEmpty();
+    } else {
+      for (const m of data.messages) addChatBubble(m.role, m.content);
+    }
+  } catch (err) {
+    addChatBubble("error", `Could not load chat history: ${err.message}`);
+  }
+}
+
+async function sendChat(text) {
+  if (chatBusy || !text.trim()) return;
+  chatBusy = true;
+  chatSendBtn.disabled = true;
+  addChatBubble("user", text);
+  const pending = addChatBubble("assistant pending", "Reading the folder…");
+  try {
+    const reply = await api("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ folder: chatScope, message: text }),
+    });
+    pending.className = "chat-msg assistant";
+    pending.textContent = reply.content;
+  } catch (err) {
+    pending.className = "chat-msg error";
+    pending.textContent = err.message;
+  } finally {
+    chatBusy = false;
+    chatSendBtn.disabled = false;
+    chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+  }
+}
+
+chatToggleBtn.addEventListener("click", () => {
+  const open = chatPanelEl.hidden;
+  chatPanelEl.hidden = !open;
+  chatToggleBtn.classList.toggle("open", open);
+  if (open) {
+    setChatScope(scopeOf(openPath));
+    chatInputEl.focus();
+  }
+});
+
+chatSendBtn.addEventListener("click", () => {
+  const text = chatInputEl.value;
+  chatInputEl.value = "";
+  sendChat(text);
+});
+
+chatInputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    const text = chatInputEl.value;
+    chatInputEl.value = "";
+    sendChat(text);
+  }
+});
+
+chatSummarizeBtn.addEventListener("click", () => {
+  sendChat("Summarize the contents of this folder.");
+});
+
+chatClearBtn.addEventListener("click", async () => {
+  if (!confirm("Clear the chat history for this folder?")) return;
+  await api(`/api/chat?folder=${encodeURIComponent(chatScope)}`, { method: "DELETE" });
+  renderChatEmpty();
 });
 
 // ---------- Rescan ----------

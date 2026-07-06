@@ -33,6 +33,7 @@
             <button id="toggle-b"></button>
           </div>
           <button id="save-btn" hidden>Save</button>
+          <button id="chat-toggle-btn" title="Toggle the folder agent">Agent</button>
         </div>
       </div>
       <div id="content">
@@ -50,6 +51,24 @@
         </div>
       </div>
     </main>
+
+    <aside id="chat-panel" hidden>
+      <div id="chat-header">
+        <div>
+          <div id="chat-title">Agent</div>
+          <div id="chat-scope">Scope: /</div>
+        </div>
+        <button id="chat-clear-btn" title="Clear this folder's chat history">&#128465;</button>
+      </div>
+      <div id="chat-messages"></div>
+      <div id="chat-actions">
+        <button id="chat-summarize-btn">Summarize this folder</button>
+      </div>
+      <div id="chat-input-row">
+        <textarea id="chat-input" rows="2" placeholder="Ask about this folder&hellip;"></textarea>
+        <button id="chat-send-btn">Send</button>
+      </div>
+    </aside>
   </div>
 
   <script src="/static/vendor/easymde.min.js"></script>

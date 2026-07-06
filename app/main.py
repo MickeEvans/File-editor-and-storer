@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from .agent.routes import router as chat_router
 from .config import PROJECT_ROOT, WORKSPACE_ROOT, file_type
 from .database import FileRecord, SessionLocal, init_db
 from .scanner import IGNORED_DIRS, scan_workspace
@@ -32,6 +33,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Workspace", lifespan=lifespan)
+app.include_router(chat_router)
 
 
 def resolve_in_workspace(rel_path: str) -> Path:

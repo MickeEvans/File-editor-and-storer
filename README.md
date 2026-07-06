@@ -18,6 +18,21 @@ Open http://localhost:8000
 
 Set a different workspace root with the `WORKSPACE_ROOT` environment variable.
 
+## Agent
+
+The Agent button (top right) opens a chat panel scoped to the current folder —
+the agent reads every file in the folder before answering. Configuration via
+environment variables, set before starting the server:
+
+| Variable            | Default          | Meaning                                        |
+| ------------------- | ---------------- | ---------------------------------------------- |
+| `ANTHROPIC_API_KEY` | —                | Anthropic API key (or log in with `ant auth login`) |
+| `LLM_PROVIDER`      | `anthropic`      | Which provider adapter to use (`anthropic` or `echo`) |
+| `LLM_MODEL`         | `claude-opus-4-8`| Model for the Anthropic provider               |
+
+`LLM_PROVIDER=echo` needs no credentials and just echoes back — handy for
+developing offline. Chat history is stored per folder in SQLite.
+
 ## Layout
 
 | Path         | What                                              |

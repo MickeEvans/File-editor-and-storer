@@ -12,6 +12,28 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False)
 Base = declarative_base()
 
 
+class ChatMessage(Base):
+    """Agent chat history, per scoped folder. This is agent memory, not
+    document storage — documents stay on disk."""
+
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True)
+    folder = Column(String, nullable=False, index=True)  # "" = workspace root
+    role = Column(String, nullable=False)  # user | assistant
+    content = Column(String, nullable=False)
+    created_at = Column(Float, nullable=False)  # unix timestamp
+
+    def as_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "folder": self.folder,
+            "role": self.role,
+            "content": self.content,
+            "created_at": self.created_at,
+        }
+
+
 class FileRecord(Base):
     __tablename__ = "files"
 
