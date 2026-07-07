@@ -369,32 +369,91 @@ window.addEventListener("beforeunload", (e) => {
   if (dirty) e.preventDefault();
 });
 
-// ---------- New file ----------
+// ---------- Creating files & folders (inline input — native prompt()
+// dialogs are unavailable in embedded webviews) ----------
 
-addFileBtn.addEventListener("click", async () => {
-  const path = prompt(
-    "New file path (relative to the workspace root):\n" +
-    "e.g.  notes/idea.md   slides/deck.html   data/table.csv",
-    "untitled.md"
-  );
-  if (!path || !path.trim()) return;
+const createRowEl = document.getElementById("create-row");
+const createInputEl = document.getElementById("create-input");
+const createHintEl = document.getElementById("create-hint");
+const createErrorEl = document.getElementById("create-error");
+const addFolderBtn = document.getElementById("add-folder-btn");
+
+let createMode = null; // "file" | "folder" | null
+
+const CREATE_CONFIG = {
+  file: {
+    placeholder: "task-1/notes.md",
+    hint: "New file — e.g. notes.md, deck.html, data.csv. Enter to create, Esc to cancel.",
+  },
+  folder: {
+    placeholder: "task-1",
+    hint: "New folder (nesting allowed, e.g. projects/task-1). Enter to create, Esc to cancel.",
+  },
+};
+
+function openCreateRow(mode) {
+  createMode = mode;
+  createRowEl.hidden = false;
+  createErrorEl.hidden = true;
+  createInputEl.placeholder = CREATE_CONFIG[mode].placeholder;
+  createHintEl.textContent = CREATE_CONFIG[mode].hint;
+  // Prefill with the open file's folder so new items land next to it
+  const folder = scopeOf(openPath);
+  createInputEl.value = folder ? folder + "/" : "";
+  createInputEl.focus();
+  createInputEl.setSelectionRange(createInputEl.value.length, createInputEl.value.length);
+}
+
+function closeCreateRow() {
+  createMode = null;
+  createRowEl.hidden = true;
+  createInputEl.value = "";
+  createErrorEl.hidden = true;
+}
+
+async function submitCreate() {
+  const path = createInputEl.value.trim();
+  if (!path) return;
   try {
-    const created = await api("/api/file", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path: path.trim(),
-        content: "",
-        create_parents: true,
-        overwrite: false,
-      }),
-    });
-    await loadTree();
-    const item = [...document.querySelectorAll(".tree-item.file")]
-      .find((i) => i.dataset.path === created.path);
-    if (item) item.click();
+    if (createMode === "file") {
+      const created = await api("/api/file", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path, content: "", create_parents: true, overwrite: false }),
+      });
+      closeCreateRow();
+      await loadTree();
+      const item = [...document.querySelectorAll(".tree-item.file")]
+        .find((i) => i.dataset.path === created.path);
+      if (item) item.click();
+    } else {
+      await api("/api/folder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      closeCreateRow();
+      await loadTree();
+    }
   } catch (err) {
-    alert(`Could not create file: ${err.message}`);
+    createErrorEl.textContent = err.message;
+    createErrorEl.hidden = false;
+  }
+}
+
+addFileBtn.addEventListener("click", () => {
+  createMode === "file" ? closeCreateRow() : openCreateRow("file");
+});
+addFolderBtn.addEventListener("click", () => {
+  createMode === "folder" ? closeCreateRow() : openCreateRow("folder");
+});
+
+createInputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitCreate();
+  } else if (e.key === "Escape") {
+    closeCreateRow();
   }
 });
 
@@ -514,26 +573,6 @@ chatClearBtn.addEventListener("click", async () => {
   if (!confirm("Clear the chat history for this folder?")) return;
   await api(`/api/chat?folder=${encodeURIComponent(chatScope)}`, { method: "DELETE" });
   renderChatEmpty();
-});
-
-// ---------- New folder ----------
-
-document.getElementById("add-folder-btn").addEventListener("click", async () => {
-  const path = prompt(
-    "New folder name (or nested path):\ne.g.  task-2026-07   or   projects/task-1",
-    "new-task"
-  );
-  if (!path || !path.trim()) return;
-  try {
-    await api("/api/folder", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path: path.trim() }),
-    });
-    await loadTree();
-  } catch (err) {
-    alert(`Could not create folder: ${err.message}`);
-  }
 });
 
 // ---------- Rescan ----------

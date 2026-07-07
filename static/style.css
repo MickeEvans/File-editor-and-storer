@@ -69,6 +69,32 @@ html, body {
   background: var(--bg-hover);
 }
 
+#create-row {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+#create-input {
+  width: 100%;
+  background: var(--bg-panel);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: var(--text);
+  padding: 5px 8px;
+  font-size: 13px;
+  outline: none;
+}
+#create-hint {
+  color: var(--text-dim);
+  font-size: 11px;
+  margin-top: 4px;
+}
+#create-error {
+  color: #e0a5a5;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
 #tree {
   overflow-y: auto;
   flex: 1;
