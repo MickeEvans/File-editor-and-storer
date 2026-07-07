@@ -16,7 +16,10 @@ python -m venv .venv
 
 Open http://localhost:8000
 
-Set a different workspace root with the `WORKSPACE_ROOT` environment variable.
+By default the workspace is the folder **containing** this project (`..`), so
+task folders live next to the app's code — create them with the "+ Folder"
+button. The `code` folder itself is hidden from the workspace and protected
+from edits. Set a different root with the `WORKSPACE_ROOT` environment variable.
 
 ## Agent
 
@@ -39,5 +42,5 @@ developing offline. Chat history is stored per folder in SQLite.
 | ------------ | ------------------------------------------------- |
 | `app/`       | FastAPI backend (API + SQLite index + scanner)    |
 | `static/`    | Plain HTML/CSS/JS frontend                        |
-| `workspace/` | Default workspace content (`.md`/`.html`/`.csv`)  |
+| `../`        | Default workspace root (`.md`/`.html`/`.csv` task folders) |
 | `TODO.md`    | Phased roadmap — walking-skeleton style           |

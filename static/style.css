@@ -54,16 +54,20 @@ html, body {
 
 #sidebar-actions { display: flex; gap: 6px; }
 
-#rescan-btn, #add-file-btn {
+#rescan-btn, #add-file-btn, #add-folder-btn {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-dim);
   border-radius: 4px;
   cursor: pointer;
   padding: 2px 8px;
-  font-size: 14px;
+  font-size: 12px;
+  white-space: nowrap;
 }
-#rescan-btn:hover, #add-file-btn:hover { color: var(--text); background: var(--bg-hover); }
+#rescan-btn:hover, #add-file-btn:hover, #add-folder-btn:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
 
 #tree {
   overflow-y: auto;

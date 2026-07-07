@@ -6,16 +6,25 @@ under the workspace root and deletes rows for files that no longer exist.
 
 from pathlib import Path
 
-from .config import WORKSPACE_ROOT, file_type
+from .config import PROJECT_ROOT, WORKSPACE_ROOT, file_type
 from .database import FileRecord, SessionLocal
 
 # Folders that should never be indexed or shown in the tree.
 IGNORED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 
 
+def is_hidden_from_workspace(path: Path) -> bool:
+    """True for the app's own code folder, ignored dirs, and dot-folders —
+    none of these belong in the user's workspace view or the agent context."""
+    if path == PROJECT_ROOT or PROJECT_ROOT in path.parents:
+        return True
+    rel_parts = path.relative_to(WORKSPACE_ROOT).parts
+    return any(part in IGNORED_DIRS or part.startswith(".") for part in rel_parts)
+
+
 def iter_workspace_files(root: Path):
     for path in sorted(root.rglob("*")):
-        if any(part in IGNORED_DIRS for part in path.relative_to(root).parts):
+        if is_hidden_from_workspace(path):
             continue
         if path.is_file():
             yield path

@@ -1,5 +1,6 @@
 """Configuration. Workspace root comes from the WORKSPACE_ROOT env var,
-falling back to the bundled ./workspace folder next to the project."""
+falling back to the folder that contains this project — so task folders
+live next to (not inside) the app's code."""
 
 import os
 from pathlib import Path
@@ -7,7 +8,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 WORKSPACE_ROOT = Path(
-    os.environ.get("WORKSPACE_ROOT", PROJECT_ROOT / "workspace")
+    os.environ.get("WORKSPACE_ROOT", PROJECT_ROOT.parent)
 ).resolve()
 
 DB_PATH = PROJECT_ROOT / "index.db"

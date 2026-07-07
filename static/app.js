@@ -516,6 +516,26 @@ chatClearBtn.addEventListener("click", async () => {
   renderChatEmpty();
 });
 
+// ---------- New folder ----------
+
+document.getElementById("add-folder-btn").addEventListener("click", async () => {
+  const path = prompt(
+    "New folder name (or nested path):\ne.g.  task-2026-07   or   projects/task-1",
+    "new-task"
+  );
+  if (!path || !path.trim()) return;
+  try {
+    await api("/api/folder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path: path.trim() }),
+    });
+    await loadTree();
+  } catch (err) {
+    alert(`Could not create folder: ${err.message}`);
+  }
+});
+
 // ---------- Rescan ----------
 
 rescanBtn.addEventListener("click", async () => {

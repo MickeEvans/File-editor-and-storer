@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from .agent.routes import router as chat_router
 from .config import PROJECT_ROOT, WORKSPACE_ROOT, file_type
 from .database import FileRecord, SessionLocal, init_db
-from .scanner import IGNORED_DIRS, scan_workspace
+from .scanner import is_hidden_from_workspace, scan_workspace
 
 STATIC_DIR = PROJECT_ROOT / "static"
 
@@ -38,17 +38,20 @@ app.include_router(chat_router)
 
 def resolve_in_workspace(rel_path: str) -> Path:
     """Resolve a client-supplied relative path, rejecting anything that
-    escapes the workspace root (e.g. ../../secrets)."""
+    escapes the workspace root (e.g. ../../secrets) or points into the
+    app's own code folder."""
     target = (WORKSPACE_ROOT / rel_path).resolve()
     if target != WORKSPACE_ROOT and WORKSPACE_ROOT not in target.parents:
         raise HTTPException(status_code=400, detail="Path escapes workspace root")
+    if target == PROJECT_ROOT or PROJECT_ROOT in target.parents:
+        raise HTTPException(status_code=400, detail="The app's code folder is off-limits")
     return target
 
 
 def build_tree(directory: Path) -> list[dict]:
     entries = []
     for path in sorted(directory.iterdir(), key=lambda p: (p.is_file(), p.name.lower())):
-        if path.name in IGNORED_DIRS:
+        if is_hidden_from_workspace(path):
             continue
         rel = path.relative_to(WORKSPACE_ROOT).as_posix()
         if path.is_dir():
@@ -112,6 +115,25 @@ def save_file(payload: FileWritePayload):
         "size": stat.st_size,
         "modified": stat.st_mtime,
     }
+
+
+class FolderCreatePayload(BaseModel):
+    path: str
+
+
+@app.post("/api/folder")
+def create_folder(payload: FolderCreatePayload):
+    """Create a (possibly nested) folder inside the workspace."""
+    name = payload.path.strip().strip("/\\")
+    if not name:
+        raise HTTPException(status_code=400, detail="Folder name is empty")
+    target = resolve_in_workspace(name)
+    if target == WORKSPACE_ROOT:
+        raise HTTPException(status_code=400, detail="Folder name is empty")
+    if target.exists():
+        raise HTTPException(status_code=409, detail="That name already exists")
+    target.mkdir(parents=True)
+    return {"path": target.relative_to(WORKSPACE_ROOT).as_posix()}
 
 
 @app.get("/api/files")
