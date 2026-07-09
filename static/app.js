@@ -40,6 +40,20 @@ async function api(path, options) {
 
 // ---------- Tree ----------
 
+// VS Code-style selection: the last clicked folder (or an opened file's
+// parent) is where new files/folders are created and what the agent scopes to.
+let selectedFolder = "";
+
+function selectFolder(path) {
+  selectedFolder = path;
+  document.querySelectorAll(".tree-item.folder.selected")
+    .forEach((el) => el.classList.remove("selected"));
+  const item = [...document.querySelectorAll(".tree-item.folder")]
+    .find((el) => el.dataset.path === path);
+  if (item) item.classList.add("selected");
+  if (!chatPanelEl.hidden) setChatScope(path);
+}
+
 function renderTree(nodes, container) {
   for (const node of nodes) {
     container.appendChild(node.kind === "folder" ? renderFolder(node) : renderFile(node));
@@ -51,6 +65,7 @@ function renderFolder(node) {
 
   const item = document.createElement("div");
   item.className = "tree-item folder";
+  item.dataset.path = node.path;
   item.innerHTML = `<span class="twisty">&#9660;</span><span>&#128193; ${node.name}</span>`;
 
   const children = document.createElement("div");
@@ -61,6 +76,7 @@ function renderFolder(node) {
   item.addEventListener("click", () => {
     const collapsed = children.classList.toggle("collapsed");
     item.querySelector(".twisty").innerHTML = collapsed ? "&#9654;" : "&#9660;";
+    selectFolder(node.path);
   });
 
   wrapper.append(item, children);
@@ -87,6 +103,10 @@ async function loadTree() {
       return;
     }
     renderTree(data.tree, treeEl);
+    // Restore the folder highlight after a re-render
+    const sel = [...document.querySelectorAll(".tree-item.folder")]
+      .find((el) => el.dataset.path === selectedFolder);
+    if (sel) sel.classList.add("selected");
   } catch (err) {
     treeEl.innerHTML = `<div class="tree-item">Failed to load tree: ${err.message}</div>`;
   }
@@ -209,7 +229,7 @@ async function openFile(node, item) {
   saveBtn.hidden = false;
   saveBtn.disabled = true;
 
-  if (!chatPanelEl.hidden) setChatScope(scopeOf(data.path));
+  selectFolder(scopeOf(data.path));
 
   if (data.type === "markdown") {
     viewToggleEl.hidden = true;
@@ -397,9 +417,8 @@ function openCreateRow(mode) {
   createErrorEl.hidden = true;
   createInputEl.placeholder = CREATE_CONFIG[mode].placeholder;
   createHintEl.textContent = CREATE_CONFIG[mode].hint;
-  // Prefill with the open file's folder so new items land next to it
-  const folder = scopeOf(openPath);
-  createInputEl.value = folder ? folder + "/" : "";
+  // Prefill with the selected folder so new items land inside it
+  createInputEl.value = selectedFolder ? selectedFolder + "/" : "";
   createInputEl.focus();
   createInputEl.setSelectionRange(createInputEl.value.length, createInputEl.value.length);
 }
@@ -427,13 +446,15 @@ async function submitCreate() {
         .find((i) => i.dataset.path === created.path);
       if (item) item.click();
     } else {
-      await api("/api/folder", {
+      const created = await api("/api/folder", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ path }),
       });
       closeCreateRow();
+      selectedFolder = created.path; // next + File goes straight into it
       await loadTree();
+      selectFolder(created.path);
     }
   } catch (err) {
     createErrorEl.textContent = err.message;
@@ -545,7 +566,7 @@ chatToggleBtn.addEventListener("click", () => {
   chatPanelEl.hidden = !open;
   chatToggleBtn.classList.toggle("open", open);
   if (open) {
-    setChatScope(scopeOf(openPath));
+    setChatScope(selectedFolder);
     chatInputEl.focus();
   }
 });
@@ -586,5 +607,8 @@ rescanBtn.addEventListener("click", async () => {
     rescanBtn.disabled = false;
   }
 });
+
+// Clicking the workspace title selects the root again
+document.getElementById("workspace-name").addEventListener("click", () => selectFolder(""));
 
 loadTree();

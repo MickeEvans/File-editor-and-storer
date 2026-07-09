@@ -114,6 +114,13 @@ html, body {
 }
 .tree-item:hover { background: var(--bg-hover); }
 .tree-item.active { background: var(--bg-active); color: #fff; }
+.tree-item.folder.selected {
+  background: var(--bg-active);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+#workspace-name { cursor: pointer; }
+#workspace-name:hover { color: var(--accent); }
 
 .tree-item .twisty {
   width: 12px;
