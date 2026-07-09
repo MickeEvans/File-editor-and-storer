@@ -44,3 +44,10 @@ developing offline. Chat history is stored per folder in SQLite.
 | `static/`    | Plain HTML/CSS/JS frontend                        |
 | `../`        | Default workspace root (`.md`/`.html`/`.csv` task folders) |
 | `TODO.md`    | Phased roadmap — walking-skeleton style           |
+
+
+# How to run the graphify nodes
+
+```bash
+Invoke-Item "graphify-out\graph.html"
+```
