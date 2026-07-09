@@ -523,7 +523,89 @@ function addChatBubble(role, text) {
 function renderChatEmpty() {
   chatMessagesEl.innerHTML =
     '<div id="chat-empty">Ask the agent about the files in this folder — ' +
-    "it reads them all before answering.</div>";
+    "it reads them all before answering. It can also propose file edits " +
+    "for you to approve. Type @ to reference a file.</div>";
+}
+
+function renderProposalCard(messageId, index, proposal) {
+  const card = document.createElement("div");
+  card.className = "proposal-card";
+
+  const head = document.createElement("div");
+  head.className = "proposal-head";
+  const pathEl = document.createElement("span");
+  pathEl.className = "proposal-path";
+  pathEl.textContent = proposal.path;
+  const statusEl = document.createElement("span");
+  statusEl.className = "proposal-status";
+  head.append(pathEl, statusEl);
+
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = "Show proposed contents";
+  const pre = document.createElement("pre");
+  pre.textContent = proposal.content;
+  details.append(summary, pre);
+
+  card.append(head, details);
+
+  const setStatus = (status) => {
+    statusEl.textContent = status === "applied" ? "✓ applied" : status;
+    statusEl.classList.toggle("applied", status === "applied");
+  };
+
+  if (proposal.status === "pending") {
+    const actions = document.createElement("div");
+    actions.className = "proposal-actions";
+    const applyBtn = document.createElement("button");
+    applyBtn.className = "apply-btn";
+    applyBtn.textContent = "Apply";
+    const dismissBtn = document.createElement("button");
+    dismissBtn.textContent = "Dismiss";
+    actions.append(applyBtn, dismissBtn);
+    card.appendChild(actions);
+
+    const act = async (action) => {
+      applyBtn.disabled = dismissBtn.disabled = true;
+      try {
+        const res = await api("/api/chat/proposal", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message_id: messageId, index, action }),
+        });
+        setStatus(res.status);
+        actions.remove();
+        if (action === "apply") {
+          await loadTree();
+          // If the edited file is open, reload it from disk
+          if (openPath === res.path) {
+            const item = [...document.querySelectorAll(".tree-item.file")]
+              .find((i) => i.dataset.path === res.path);
+            setDirty(false); // disk now holds the agent's version
+            if (item) item.click();
+          }
+        }
+      } catch (err) {
+        applyBtn.disabled = dismissBtn.disabled = false;
+        setStatus(`error: ${err.message}`);
+      }
+    };
+    applyBtn.addEventListener("click", () => act("apply"));
+    dismissBtn.addEventListener("click", () => act("dismiss"));
+    setStatus("pending");
+  } else {
+    setStatus(proposal.status);
+  }
+
+  return card;
+}
+
+function addChatMessage(msg) {
+  addChatBubble(msg.role, msg.content);
+  (msg.proposals || []).forEach((p, i) => {
+    chatMessagesEl.appendChild(renderProposalCard(msg.id, i, p));
+  });
+  chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
 }
 
 async function setChatScope(scope) {
@@ -538,7 +620,7 @@ async function setChatScope(scope) {
     if (data.messages.length === 0) {
       renderChatEmpty();
     } else {
-      for (const m of data.messages) addChatBubble(m.role, m.content);
+      for (const m of data.messages) addChatMessage(m);
     }
   } catch (err) {
     addChatBubble("error", `Could not load chat history: ${err.message}`);
@@ -559,6 +641,9 @@ async function sendChat(text) {
     });
     pending.className = "chat-msg assistant";
     pending.textContent = reply.content;
+    (reply.proposals || []).forEach((p, i) => {
+      chatMessagesEl.appendChild(renderProposalCard(reply.id, i, p));
+    });
   } catch (err) {
     pending.className = "chat-msg error";
     pending.textContent = err.message;
@@ -575,6 +660,7 @@ chatToggleBtn.addEventListener("click", () => {
   chatToggleBtn.classList.toggle("open", open);
   if (open) {
     setChatScope(selectedFolder);
+    refreshAcPaths();
     chatInputEl.focus();
   }
 });
@@ -585,7 +671,75 @@ chatSendBtn.addEventListener("click", () => {
   sendChat(text);
 });
 
+// ----- @file autocomplete -----
+
+const chatAcEl = document.getElementById("chat-autocomplete");
+let acPaths = [];      // all workspace file paths
+let acMatches = [];    // current dropdown entries
+let acIndex = 0;       // highlighted entry
+let acTokenStart = -1; // position of the "@" being completed
+
+async function refreshAcPaths() {
+  try {
+    const data = await api("/api/files");
+    acPaths = data.files.map((f) => f.path);
+  } catch { acPaths = []; }
+}
+
+function hideAutocomplete() {
+  chatAcEl.hidden = true;
+  acMatches = [];
+  acTokenStart = -1;
+}
+
+function updateAutocomplete() {
+  const caret = chatInputEl.selectionStart;
+  const before = chatInputEl.value.slice(0, caret);
+  const at = before.lastIndexOf("@");
+  if (at === -1 || before.slice(at + 1).includes("\n")) return hideAutocomplete();
+
+  const token = before.slice(at + 1).toLowerCase();
+  acMatches = acPaths.filter((p) => p.toLowerCase().includes(token)).slice(0, 8);
+  if (acMatches.length === 0) return hideAutocomplete();
+
+  acTokenStart = at;
+  acIndex = 0;
+  chatAcEl.innerHTML = "";
+  acMatches.forEach((path, i) => {
+    const item = document.createElement("div");
+    item.className = "ac-item" + (i === 0 ? " active" : "");
+    item.textContent = path;
+    item.addEventListener("mousedown", (e) => { e.preventDefault(); pickAutocomplete(i); });
+    chatAcEl.appendChild(item);
+  });
+  chatAcEl.hidden = false;
+}
+
+function pickAutocomplete(i) {
+  const caret = chatInputEl.selectionStart;
+  const value = chatInputEl.value;
+  chatInputEl.value = value.slice(0, acTokenStart) + "@" + acMatches[i] + " " + value.slice(caret);
+  const newCaret = acTokenStart + acMatches[i].length + 2;
+  chatInputEl.setSelectionRange(newCaret, newCaret);
+  hideAutocomplete();
+  chatInputEl.focus();
+}
+
+function moveAcHighlight(delta) {
+  acIndex = (acIndex + delta + acMatches.length) % acMatches.length;
+  [...chatAcEl.children].forEach((el, i) => el.classList.toggle("active", i === acIndex));
+}
+
+chatInputEl.addEventListener("input", updateAutocomplete);
+chatInputEl.addEventListener("blur", () => setTimeout(hideAutocomplete, 150));
+
 chatInputEl.addEventListener("keydown", (e) => {
+  if (!chatAcEl.hidden) {
+    if (e.key === "ArrowDown") { e.preventDefault(); return moveAcHighlight(1); }
+    if (e.key === "ArrowUp") { e.preventDefault(); return moveAcHighlight(-1); }
+    if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); return pickAutocomplete(acIndex); }
+    if (e.key === "Escape") { e.preventDefault(); return hideAutocomplete(); }
+  }
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     const text = chatInputEl.value;

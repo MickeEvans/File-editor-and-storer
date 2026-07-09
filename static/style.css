@@ -425,11 +425,106 @@ html, body {
 #chat-summarize-btn:hover { color: var(--text); background: var(--bg-hover); }
 
 #chat-input-row {
+  position: relative;
   display: flex;
   gap: 8px;
   padding: 10px 12px;
   border-top: 1px solid var(--border);
 }
+
+/* @file autocomplete dropdown */
+#chat-autocomplete {
+  position: absolute;
+  bottom: 100%;
+  left: 12px;
+  right: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.4);
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+}
+.ac-item {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: Consolas, "Cascadia Mono", monospace;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ac-item:hover, .ac-item.active { background: var(--bg-active); color: #fff; }
+
+/* Proposed file edits */
+.proposal-card {
+  align-self: stretch;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 12px;
+  overflow: hidden;
+}
+.proposal-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+}
+.proposal-path {
+  font-family: Consolas, "Cascadia Mono", monospace;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.proposal-status {
+  margin-left: auto;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.proposal-status.applied { color: #6fbf8f; }
+.proposal-card details { border-top: 1px solid var(--border); }
+.proposal-card summary {
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+.proposal-card pre {
+  margin: 0;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 11px;
+  background: var(--bg-panel);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.proposal-actions {
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+}
+.proposal-actions button {
+  border-radius: 4px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--text-dim);
+}
+.proposal-actions .apply-btn {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0d1420;
+  font-weight: 600;
+}
+.proposal-actions button:hover { filter: brightness(1.15); }
 #chat-input {
   flex: 1;
   resize: none;

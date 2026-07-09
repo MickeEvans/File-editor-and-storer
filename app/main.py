@@ -26,6 +26,7 @@ from .agent.routes import router as chat_router
 from .config import PROJECT_ROOT, file_type
 from .database import FileRecord, SessionLocal, init_db
 from .scanner import is_hidden_from_workspace, scan_workspace
+from .workspace import resolve_in_workspace
 
 STATIC_DIR = PROJECT_ROOT / "static"
 
@@ -40,18 +41,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Workspace", lifespan=lifespan)
 app.include_router(chat_router)
-
-
-def resolve_in_workspace(rel_path: str) -> Path:
-    """Resolve a client-supplied relative path, rejecting anything that
-    escapes the workspace root (e.g. ../../secrets) or points into the
-    app's own code folder."""
-    target = (config.WORKSPACE_ROOT / rel_path).resolve()
-    if target != config.WORKSPACE_ROOT and config.WORKSPACE_ROOT not in target.parents:
-        raise HTTPException(status_code=400, detail="Path escapes workspace root")
-    if target == PROJECT_ROOT or PROJECT_ROOT in target.parents:
-        raise HTTPException(status_code=400, detail="The app's code folder is off-limits")
-    return target
 
 
 def build_tree(directory: Path) -> list[dict]:

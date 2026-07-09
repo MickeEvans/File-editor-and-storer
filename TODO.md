@@ -82,12 +82,13 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] Command: answer questions about the folder's contents
 - [x] Store chat history in SQLite (`chat_messages` table, per folder)
 
-## Phase 4 — Agent v2 (scale + editing)  [later]
+## Phase 4 — Agent v2 (scale + editing)
 
 - [ ] Add embeddings + vector search in SQLite (for folders too big for context)
 - [ ] Retrieve only relevant files instead of dumping everything
-- [ ] Let the agent *propose* edits to files
-- [ ] Require explicit user confirmation before any file is written
+- [x] Let the agent *propose* edits to files (propose_file_edit tool; full-file rewrites)
+- [x] Require explicit user confirmation before any file is written (Apply/Dismiss cards in chat; proposals persist in chat history)
+- [x] @file references in chat with autocomplete (pulls out-of-scope files into context)
 
 ## Phase 5 — Polish  [later]
 

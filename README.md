@@ -30,8 +30,12 @@ at startup.
 ## Agent
 
 The Agent button (top right) opens a chat panel scoped to the current folder —
-the agent reads every file in the folder before answering. Configuration via
-environment variables, set before starting the server:
+the agent reads every file in the folder before answering. It can also
+**propose file edits**: proposals appear as cards in the chat and nothing is
+written to disk until you click Apply. Type `@` in the chat box to reference
+any workspace file (autocomplete) and pull it into the agent's context even
+when it's outside the current folder. Configuration via environment
+variables, set before starting the server:
 
 | Variable            | Default          | Meaning                                        |
 | ------------------- | ---------------- | ---------------------------------------------- |

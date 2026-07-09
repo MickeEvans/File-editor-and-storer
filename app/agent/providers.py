@@ -4,15 +4,51 @@ here and setting the LLM_PROVIDER env var."""
 
 import os
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
+
+
+@dataclass
+class AgentReply:
+    """What a provider turn produces: the assistant's text, plus any file
+    edits the model proposed. Proposals are never written to disk here —
+    the user approves them in the UI first."""
+
+    text: str
+    proposals: list[dict] = field(default_factory=list)  # {path, content, status}
+
+
+# The one tool the agent gets: propose (not perform) a file write.
+PROPOSE_EDIT_TOOL = {
+    "name": "propose_file_edit",
+    "description": (
+        "Propose creating a new file or rewriting an existing file in the user's "
+        "workspace. Provide the COMPLETE new file contents (not a diff). The user "
+        "sees the proposal in the chat and must approve it before anything is "
+        "written to disk. Use workspace-relative paths like 'notes/idea.md'."
+    ),
+    "strict": True,
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "path": {
+                "type": "string",
+                "description": "Workspace-relative path of the file to create or rewrite",
+            },
+            "content": {"type": "string", "description": "The complete new file contents"},
+        },
+        "required": ["path", "content"],
+        "additionalProperties": False,
+    },
+}
 
 
 class LLMProvider(ABC):
-    """Minimal chat interface: system prompt + message history in, text out."""
+    """Minimal chat interface: system prompt + message history in, reply out."""
 
     name: str = "base"
 
     @abstractmethod
-    def complete(self, system: str, messages: list[dict]) -> str:
+    def complete(self, system: str, messages: list[dict]) -> AgentReply:
         """messages: [{"role": "user"|"assistant", "content": str}, ...]"""
 
 
@@ -32,7 +68,7 @@ class AnthropicProvider(LLMProvider):
         self.client = anthropic.Anthropic()
         self.model = model or os.environ.get("LLM_MODEL", "claude-opus-4-8")
 
-    def complete(self, system: str, messages: list[dict]) -> str:
+    def complete(self, system: str, messages: list[dict]) -> AgentReply:
         try:
             # Stream and collect: folder context can be large, and streaming
             # avoids HTTP timeouts on long responses.
@@ -41,6 +77,7 @@ class AnthropicProvider(LLMProvider):
                 max_tokens=64000,
                 system=system,
                 thinking={"type": "adaptive"},
+                tools=[PROPOSE_EDIT_TOOL],
                 messages=messages,
             ) as stream:
                 response = stream.get_final_message()
@@ -65,22 +102,41 @@ class AnthropicProvider(LLMProvider):
             raise ProviderError(f"Anthropic API error ({exc.status_code}): {exc.message}") from exc
 
         if response.stop_reason == "refusal":
-            return "The model declined to answer this request."
-        return "".join(block.text for block in response.content if block.type == "text")
+            return AgentReply(text="The model declined to answer this request.")
+
+        text = "".join(block.text for block in response.content if block.type == "text")
+        proposals = [
+            {"path": block.input["path"], "content": block.input["content"], "status": "pending"}
+            for block in response.content
+            if block.type == "tool_use" and block.name == "propose_file_edit"
+        ]
+        if proposals and not text.strip():
+            text = "I've proposed the file changes below — review and apply the ones you want."
+        return AgentReply(text=text, proposals=proposals)
 
 
 class EchoProvider(LLMProvider):
     """Offline stand-in: proves the adapter works without any API. Useful for
-    development and tests (set LLM_PROVIDER=echo)."""
+    development and tests (set LLM_PROVIDER=echo). A message starting with
+    'edit:' makes it propose a file edit, for exercising the approval UI."""
 
     name = "echo"
 
-    def complete(self, system: str, messages: list[dict]) -> str:
+    def complete(self, system: str, messages: list[dict]) -> AgentReply:
         file_count = system.count("<file path=")
-        return (
-            f"[echo provider] I can see {file_count} file(s) in the scoped folder. "
-            f"You said: {messages[-1]['content']}"
+        ref_count = system.count("<referenced-file path=")
+        last = messages[-1]["content"]
+        reply = AgentReply(
+            text=(
+                f"[echo provider] I can see {file_count} file(s) in the scoped folder "
+                f"and {ref_count} referenced file(s). You said: {last}"
+            )
         )
+        if last.startswith("edit:"):
+            reply.proposals.append(
+                {"path": "echo-test.md", "content": last[5:].strip() + "\n", "status": "pending"}
+            )
+        return reply
 
 
 def get_provider() -> LLMProvider:
