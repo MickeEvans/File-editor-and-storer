@@ -1,15 +1,56 @@
-"""Configuration. Workspace root comes from the WORKSPACE_ROOT env var,
-falling back to the folder that contains this project — so task folders
-live next to (not inside) the app's code."""
+"""Configuration. The workspace root is switchable at runtime (folder
+picker in the UI) and persisted in settings.json. Precedence at startup:
+WORKSPACE_ROOT env var > settings.json > the folder containing this project.
 
+Modules must read it via `config.WORKSPACE_ROOT` (module attribute) or
+`get_workspace_root()` — never `from .config import WORKSPACE_ROOT`, which
+would freeze the value at import time."""
+
+import json
 import os
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SETTINGS_PATH = PROJECT_ROOT / "settings.json"
 
-WORKSPACE_ROOT = Path(
-    os.environ.get("WORKSPACE_ROOT", PROJECT_ROOT.parent)
-).resolve()
+
+def _load_settings() -> dict:
+    try:
+        return json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def _save_settings(settings: dict) -> None:
+    SETTINGS_PATH.write_text(json.dumps(settings, indent=2), encoding="utf-8")
+
+
+def _initial_workspace_root() -> Path:
+    if os.environ.get("WORKSPACE_ROOT"):
+        return Path(os.environ["WORKSPACE_ROOT"]).resolve()
+    saved = _load_settings().get("workspace_root")
+    if saved and Path(saved).is_dir():
+        return Path(saved).resolve()
+    return PROJECT_ROOT.parent
+
+
+WORKSPACE_ROOT = _initial_workspace_root()
+
+
+def get_workspace_root() -> Path:
+    return WORKSPACE_ROOT
+
+
+def set_workspace_root(path: Path) -> None:
+    """Switch the workspace at runtime and remember it for next start."""
+    global WORKSPACE_ROOT
+    path = path.resolve()
+    if not path.is_dir():
+        raise ValueError(f"Not a folder: {path}")
+    WORKSPACE_ROOT = path
+    settings = _load_settings()
+    settings["workspace_root"] = str(path)
+    _save_settings(settings)
 
 DB_PATH = PROJECT_ROOT / "index.db"
 

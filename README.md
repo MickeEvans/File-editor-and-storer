@@ -19,7 +19,13 @@ Open http://localhost:8000
 By default the workspace is the folder **containing** this project (`..`), so
 task folders live next to the app's code — create them with the "+ Folder"
 button. The `code` folder itself is hidden from the workspace and protected
-from edits. Set a different root with the `WORKSPACE_ROOT` environment variable.
+from edits.
+
+**Switching workspace:** the folder button (📂) in the sidebar opens the native
+Windows folder picker — choose any folder on the machine and the workspace
+switches to it. The choice is persisted in `settings.json` and survives
+restarts. The `WORKSPACE_ROOT` environment variable, when set, overrides it
+at startup.
 
 ## Agent
 

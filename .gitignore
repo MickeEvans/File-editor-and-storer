@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 index.db
 .claude
+settings.json
 

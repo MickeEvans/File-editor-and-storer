@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from ..config import WORKSPACE_ROOT
+from .. import config
 from ..database import ChatMessage, SessionLocal
 from .context import build_folder_context
 from .providers import ProviderError, get_provider
@@ -23,8 +23,8 @@ HISTORY_TURNS_FOR_MODEL = 20
 
 
 def resolve_folder(folder: str) -> Path:
-    target = (WORKSPACE_ROOT / folder).resolve()
-    if target != WORKSPACE_ROOT and WORKSPACE_ROOT not in target.parents:
+    target = (config.WORKSPACE_ROOT / folder).resolve()
+    if target != config.WORKSPACE_ROOT and config.WORKSPACE_ROOT not in target.parents:
         raise HTTPException(status_code=400, detail="Folder escapes workspace root")
     if not target.is_dir():
         raise HTTPException(status_code=404, detail=f"No such folder: {folder or '/'}")

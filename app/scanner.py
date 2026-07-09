@@ -6,7 +6,8 @@ under the workspace root and deletes rows for files that no longer exist.
 
 from pathlib import Path
 
-from .config import PROJECT_ROOT, WORKSPACE_ROOT, file_type
+from . import config
+from .config import PROJECT_ROOT, file_type
 from .database import FileRecord, SessionLocal
 
 # Folders that should never be indexed or shown in the tree.
@@ -18,7 +19,7 @@ def is_hidden_from_workspace(path: Path) -> bool:
     none of these belong in the user's workspace view or the agent context."""
     if path == PROJECT_ROOT or PROJECT_ROOT in path.parents:
         return True
-    rel_parts = path.relative_to(WORKSPACE_ROOT).parts
+    rel_parts = path.relative_to(config.WORKSPACE_ROOT).parts
     return any(part in IGNORED_DIRS or part.startswith(".") for part in rel_parts)
 
 
@@ -37,8 +38,8 @@ def scan_workspace() -> dict:
         seen: set[str] = set()
         added = updated = 0
 
-        for path in iter_workspace_files(WORKSPACE_ROOT):
-            rel = path.relative_to(WORKSPACE_ROOT).as_posix()
+        for path in iter_workspace_files(config.WORKSPACE_ROOT):
+            rel = path.relative_to(config.WORKSPACE_ROOT).as_posix()
             seen.add(rel)
             stat = path.stat()
 

@@ -7,7 +7,8 @@ when folders outgrow the context window.
 
 from pathlib import Path
 
-from ..config import WORKSPACE_ROOT, file_type
+from .. import config
+from ..config import file_type
 from ..scanner import iter_workspace_files
 
 # Rough guard so a huge folder can't blow the request. ~200K chars is far
@@ -27,13 +28,13 @@ Scoped folder: {folder}
 
 def build_folder_context(folder: Path) -> str:
     """Render the system prompt with every text file in `folder` inlined."""
-    rel_folder = folder.relative_to(WORKSPACE_ROOT).as_posix() if folder != WORKSPACE_ROOT else "/"
+    rel_folder = folder.relative_to(config.WORKSPACE_ROOT).as_posix() if folder != config.WORKSPACE_ROOT else "/"
 
     parts = []
     used = 0
     skipped = []
     for path in iter_workspace_files(folder):
-        rel = path.relative_to(WORKSPACE_ROOT).as_posix()
+        rel = path.relative_to(config.WORKSPACE_ROOT).as_posix()
         try:
             content = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):

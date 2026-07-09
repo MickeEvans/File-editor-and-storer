@@ -94,10 +94,18 @@ function renderFile(node) {
   return item;
 }
 
+function setWorkspaceTitle(rootPath) {
+  const nameEl = document.getElementById("workspace-name");
+  const name = rootPath.split(/[\\/]/).filter(Boolean).pop() || rootPath;
+  nameEl.textContent = name;
+  nameEl.title = rootPath + "\n(click to select the workspace root)";
+}
+
 async function loadTree() {
   treeEl.innerHTML = "";
   try {
     const data = await api("/api/tree");
+    setWorkspaceTitle(data.root);
     if (data.tree.length === 0) {
       treeEl.innerHTML = '<div class="tree-item">Workspace is empty</div>';
       return;
@@ -594,6 +602,54 @@ chatClearBtn.addEventListener("click", async () => {
   if (!confirm("Clear the chat history for this folder?")) return;
   await api(`/api/chat?folder=${encodeURIComponent(chatScope)}`, { method: "DELETE" });
   renderChatEmpty();
+});
+
+// ---------- Choose workspace folder ----------
+
+const pickWorkspaceBtn = document.getElementById("pick-workspace-btn");
+const sidebarErrorEl = document.getElementById("sidebar-error");
+
+function showSidebarError(message) {
+  sidebarErrorEl.textContent = message;
+  sidebarErrorEl.hidden = false;
+  setTimeout(() => { sidebarErrorEl.hidden = true; }, 6000);
+}
+
+function resetWorkspaceState() {
+  if (easyMDE) easyMDE.value("");
+  openPath = null;
+  openType = null;
+  setDirty(false);
+  saveBtn.hidden = true;
+  viewToggleEl.hidden = true;
+  if (activeItem) activeItem.classList.remove("active");
+  activeItem = null;
+  selectedFolder = "";
+  currentFileEl.textContent = "No file open";
+  currentFileEl.classList.add("placeholder");
+  currentTypeEl.textContent = "";
+  showPane("empty");
+  closeCreateRow();
+  if (!chatPanelEl.hidden) {
+    chatScope = null; // force a history reload for the new workspace
+    setChatScope("");
+  }
+}
+
+pickWorkspaceBtn.addEventListener("click", async () => {
+  if (dirty && !confirm("You have unsaved changes. Discard them?")) return;
+  pickWorkspaceBtn.disabled = true;
+  try {
+    const res = await api("/api/workspace/pick", { method: "POST" });
+    if (!res.cancelled) {
+      resetWorkspaceState();
+      await loadTree();
+    }
+  } catch (err) {
+    showSidebarError(`Could not switch workspace: ${err.message}`);
+  } finally {
+    pickWorkspaceBtn.disabled = false;
+  }
 });
 
 // ---------- Rescan ----------

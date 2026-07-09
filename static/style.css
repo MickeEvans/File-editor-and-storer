@@ -54,7 +54,7 @@ html, body {
 
 #sidebar-actions { display: flex; gap: 6px; }
 
-#rescan-btn, #add-file-btn, #add-folder-btn {
+#rescan-btn, #add-file-btn, #add-folder-btn, #pick-workspace-btn {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-dim);
@@ -64,9 +64,24 @@ html, body {
   font-size: 12px;
   white-space: nowrap;
 }
-#rescan-btn:hover, #add-file-btn:hover, #add-folder-btn:hover {
+#rescan-btn:hover, #add-file-btn:hover, #add-folder-btn:hover, #pick-workspace-btn:hover {
   color: var(--text);
   background: var(--bg-hover);
+}
+#pick-workspace-btn:disabled { opacity: 0.5; cursor: wait; }
+
+#workspace-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 110px;
+}
+
+#sidebar-error {
+  padding: 6px 12px;
+  color: #e0a5a5;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
 }
 
 #create-row {

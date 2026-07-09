@@ -12,13 +12,15 @@
   <div id="app">
     <aside id="sidebar">
       <div id="sidebar-header">
-        <span id="workspace-name">Workspace</span>
+        <span id="workspace-name" title="Click to select the workspace root">Workspace</span>
         <span id="sidebar-actions">
           <button id="add-file-btn" title="New file">&#65291; File</button>
           <button id="add-folder-btn" title="New folder">&#65291; Folder</button>
+          <button id="pick-workspace-btn" title="Choose workspace folder&hellip;">&#128194;</button>
           <button id="rescan-btn" title="Re-scan workspace into the index">&#x21bb;</button>
         </span>
       </div>
+      <div id="sidebar-error" hidden></div>
       <div id="create-row" hidden>
         <input id="create-input" type="text" spellcheck="false" autocomplete="off">
         <div id="create-hint"></div>
