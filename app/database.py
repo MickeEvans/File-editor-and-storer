@@ -67,3 +67,16 @@ def init_db() -> None:
             conn.commit()
         except OperationalError:
             pass  # column already there
+    with engine.connect() as conn:
+        # Full-text index over file contents (BM25 ranking via FTS5) and the
+        # wiki-link graph between notes — both maintained by the scanner.
+        conn.execute(text(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS files_fts USING fts5(path UNINDEXED, content)"
+        ))
+        conn.execute(text(
+            "CREATE TABLE IF NOT EXISTS note_links ("
+            "src VARCHAR NOT NULL, target VARCHAR NOT NULL, resolved VARCHAR)"
+        ))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_note_links_src ON note_links(src)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS idx_note_links_resolved ON note_links(resolved)"))
+        conn.commit()

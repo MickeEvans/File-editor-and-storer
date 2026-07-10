@@ -82,20 +82,21 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] Command: answer questions about the folder's contents
 - [x] Store chat history in SQLite (`chat_messages` table, per folder)
 
-## Phase 4 — Agent v2 (scale + editing)
+## Phase 4 — Agent v2 (scale + editing)  ✔ done
 
-- [ ] Add embeddings + vector search in SQLite (for folders too big for context)
-- [ ] Retrieve only relevant files instead of dumping everything
-- [x] Let the agent edit files (propose_file_edit tool; full-file rewrites)
+- [x] ~~Embeddings~~ → full-text search in SQLite (FTS5/BM25; Anthropic has no embeddings API — revisit vectors via Voyage if BM25 ever falls short)
+- [x] Retrieve only relevant files instead of dumping everything — the agent drives its own retrieval with a search_files → read_file tool loop
+- [x] Let the agent edit files (propose_file_edit tool; full-file rewrites, applied mid-loop so it can verify its work)
 - [x] ~~Require explicit user confirmation~~ → changed to: edits apply directly, with one-click Undo (previous contents stored per edit)
 - [x] @file references in chat with autocomplete (pulls out-of-scope files into context)
 - [x] Lean context: folder map always; full contents only when small / referenced / open / `_index.md` (replaces whole-folder-in-context)
-- [ ] Obsidian-style knowledge graph: wiki-links between notes, link index in SQLite, graph traversal for the agent
+- [x] Obsidian-style knowledge graph: `[[wiki-links]]` parsed into a note_links table on scan; get_links tool gives the agent outgoing links + backlinks
 
 ## Phase 5 — Polish  [later]
 
+- [ ] Graph view UI (visualize the wiki-link graph, Obsidian-style)
 - [ ] Tags on files
-- [ ] Folder-wide search
+- [ ] Folder-wide search (backend exists: FTS5 index — needs a search box in the UI)
 - [ ] Settings screen (workspace root, chosen LLM provider)
 - [ ] Support multiple workspaces
 

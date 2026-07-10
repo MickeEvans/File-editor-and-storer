@@ -1,14 +1,24 @@
-"""Sync what's on disk into the SQLite `files` table.
+"""Sync what's on disk into SQLite: the `files` table (metadata index),
+the `files_fts` full-text index (BM25 search), and the `note_links`
+wiki-link graph ([[target]] links between notes).
 
 The filesystem is the source of truth: the scan upserts every file found
 under the workspace root and deletes rows for files that no longer exist.
+Content indexing is incremental — only added/changed files are re-read.
 """
 
+import re
 from pathlib import Path
+
+from sqlalchemy import text as sql
 
 from . import config
 from .config import PROJECT_ROOT, file_type
-from .database import FileRecord, SessionLocal
+from .database import FileRecord, SessionLocal, engine
+
+# Don't index the content of files bigger than this (metadata still tracked)
+MAX_INDEXED_SIZE = 512_000
+WIKI_LINK_RE = re.compile(r"\[\[([^\]|#\n]+)(?:[#|][^\]]*)?\]\]")
 
 # Folders that should never be indexed or shown in the tree.
 IGNORED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
@@ -31,9 +41,51 @@ def iter_workspace_files(root: Path):
             yield path
 
 
+def _index_content(conn, rel: str, path: Path) -> None:
+    """(Re)build the FTS row and outgoing wiki-links for one file."""
+    conn.execute(sql("DELETE FROM files_fts WHERE path = :p"), {"p": rel})
+    conn.execute(sql("DELETE FROM note_links WHERE src = :p"), {"p": rel})
+    try:
+        if path.stat().st_size > MAX_INDEXED_SIZE:
+            return
+        content = path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError):
+        return
+    conn.execute(sql("INSERT INTO files_fts (path, content) VALUES (:p, :c)"), {"p": rel, "c": content})
+    if rel.lower().endswith(".md"):
+        for target in {m.group(1).strip() for m in WIKI_LINK_RE.finditer(content)}:
+            conn.execute(
+                sql("INSERT INTO note_links (src, target, resolved) VALUES (:s, :t, NULL)"),
+                {"s": rel, "t": target},
+            )
+
+
+def _resolve_links(conn, all_paths: set[str]) -> None:
+    """Point each [[target]] at an actual file: exact path match first,
+    then Obsidian-style match on the file's name without extension."""
+    by_stem: dict[str, str] = {}
+    for p in sorted(all_paths):
+        stem = p.rsplit("/", 1)[-1].rsplit(".", 1)[0].lower()
+        by_stem.setdefault(stem, p)
+    rows = conn.execute(sql("SELECT rowid, target FROM note_links")).fetchall()
+    for rowid, target in rows:
+        t = target.strip().lower()
+        resolved = None
+        if target in all_paths:
+            resolved = target
+        elif t in by_stem:
+            resolved = by_stem[t]
+        elif t.rsplit(".", 1)[0] in by_stem:
+            resolved = by_stem[t.rsplit(".", 1)[0]]
+        conn.execute(sql("UPDATE note_links SET resolved = :r WHERE rowid = :id"), {"r": resolved, "id": rowid})
+
+
 def scan_workspace() -> dict:
-    """Upsert all files on disk into the index; prune rows for deleted files."""
+    """Upsert all files on disk into the index; prune rows for deleted files;
+    keep the full-text index and wiki-link graph in sync."""
     session = SessionLocal()
+    changed: list[tuple[str, Path]] = []
+    removed_paths: list[str] = []
     try:
         seen: set[str] = set()
         added = updated = 0
@@ -54,19 +106,33 @@ def scan_workspace() -> dict:
                     )
                 )
                 added += 1
+                changed.append((rel, path))
             elif record.size != stat.st_size or record.modified != stat.st_mtime:
                 record.size = stat.st_size
                 record.modified = stat.st_mtime
                 record.type = file_type(path)
                 updated += 1
+                changed.append((rel, path))
 
         removed = 0
         for record in session.query(FileRecord).all():
             if record.path not in seen:
+                removed_paths.append(record.path)
                 session.delete(record)
                 removed += 1
 
         session.commit()
-        return {"added": added, "updated": updated, "removed": removed, "total": len(seen)}
     finally:
         session.close()
+
+    with engine.connect() as conn:
+        for rel in removed_paths:
+            conn.execute(sql("DELETE FROM files_fts WHERE path = :p"), {"p": rel})
+            conn.execute(sql("DELETE FROM note_links WHERE src = :p"), {"p": rel})
+        for rel, path in changed:
+            _index_content(conn, rel, path)
+        if changed or removed_paths:
+            _resolve_links(conn, seen)
+        conn.commit()
+
+    return {"added": added, "updated": updated, "removed": removed, "total": len(seen)}

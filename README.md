@@ -41,6 +41,13 @@ when it's small (< ~30 KB total), any `@referenced` files, the file open in
 your editor, and any `_index.md` / `README.md` folder indexes. For big folders,
 describe the folder in an `_index.md` and the agent always reads it.
 
+**The agent fetches the rest itself.** It has tools it can call while
+answering: `search_files` (full-text search of the whole workspace — SQLite
+FTS5 with BM25 ranking, maintained by the scanner), `read_file`, and
+`get_links`, which traverses the wiki-link graph: write `[[note-name]]` in
+your Markdown and the scanner indexes the link, so the agent can follow
+links and backlinks between notes, Obsidian-style.
+
 Configuration via environment variables, set before starting the server:
 
 | Variable            | Default          | Meaning                                        |

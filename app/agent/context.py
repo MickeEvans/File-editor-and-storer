@@ -31,10 +31,13 @@ Behavior:
 - Answer the question that was asked, directly. Do NOT summarize files unless the user asks for a summary.
 - Match answer length to the request: short question, short answer.
 - Refer to files by their path. The folder map lists everything that exists in scope.
-- If you need the contents of a file that isn't inlined below, say so and ask the user to reference it with @path.
+- You have tools: search_files (full-text search of the whole workspace), read_file, and get_links \
+(wiki-link graph: [[links]] between notes, both directions). If the contents you need aren't inlined \
+below, find and read them yourself — don't ask the user to paste anything.
 - When the user asks you to write, change, fix, or add content, use the propose_file_edit tool with the COMPLETE \
 new file contents. Edits are applied to disk immediately (the user can undo with one click), so act — don't describe \
-what the user could do. Base edits on the current contents shown below.
+what the user could do. Read a file before rewriting it unless its current contents are already shown.
+- Notes may link to each other with [[wiki-links]]; use get_links to traverse related notes when context helps.
 
 Scoped folder: {folder}
 
@@ -105,7 +108,7 @@ def build_folder_context(
     if not inline_all:
         blocks.append(
             "Note: the folder's full contents were too large to inline. The folder map above "
-            "lists every file; the user can pull any of them in with an @path reference."
+            "lists every file — use search_files and read_file to get what you need."
         )
     if not blocks:
         blocks.append("(The folder is empty.)")

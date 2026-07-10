@@ -18,6 +18,7 @@ from ..scanner import scan_workspace
 from ..workspace import resolve_in_workspace
 from .context import build_folder_context
 from .providers import ProviderError, get_provider
+from .tools import ToolContext
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -96,30 +97,15 @@ def send_message(req: ChatRequest):
             except HTTPException:
                 open_file = None
         system = build_folder_context(target, referenced=referenced, open_file=open_file)
+        tool_ctx = ToolContext(folder_rel=req.folder)
         try:
-            reply = get_provider().complete(system, model_messages)
+            reply = get_provider().complete(system, model_messages, tool_ctx)
         except ProviderError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
 
-        # Apply the agent's edits immediately; each one keeps the previous
-        # contents so the user can undo with one click.
-        applied_any = False
-        for proposal in reply.proposals:
-            try:
-                target_file = resolve_in_workspace(proposal["path"])
-                if target_file.is_dir():
-                    raise HTTPException(status_code=400, detail="Path is a folder")
-                proposal["previous"] = (
-                    target_file.read_text(encoding="utf-8") if target_file.is_file() else None
-                )
-                target_file.parent.mkdir(parents=True, exist_ok=True)
-                target_file.write_text(proposal["content"], encoding="utf-8")
-                proposal["status"] = "applied"
-                applied_any = True
-            except HTTPException as exc:
-                proposal["status"] = "blocked"
-                proposal["error"] = exc.detail
-        if applied_any:
+        # Edits were applied by the tool loop (with previous contents kept
+        # for undo); refresh the index so they're searchable right away.
+        if any(p["status"] == "applied" for p in reply.proposals):
             scan_workspace()
 
         now = time.time()
