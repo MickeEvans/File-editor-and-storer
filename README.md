@@ -29,19 +29,26 @@ at startup.
 
 ## Agent
 
-The Agent button (top right) opens a chat panel scoped to the current folder —
-the agent reads every file in the folder before answering. It can also
-**propose file edits**: proposals appear as cards in the chat and nothing is
-written to disk until you click Apply. Type `@` in the chat box to reference
-any workspace file (autocomplete) and pull it into the agent's context even
-when it's outside the current folder. Configuration via environment
-variables, set before starting the server:
+The Agent button (top right) opens a chat panel scoped to the current folder.
+It behaves like a normal chat assistant that knows your files, and it **edits
+files directly**: changes are written to disk immediately and show up as cards
+in the chat with a one-click **Undo**. Type `@` in the chat box to reference
+any workspace file (autocomplete) and pull it into the agent's context.
+
+**What the agent sees** (kept small so replies stay fast): a map of every file
+in the scoped folder (paths + sizes), plus full contents of — the whole folder
+when it's small (< ~30 KB total), any `@referenced` files, the file open in
+your editor, and any `_index.md` / `README.md` folder indexes. For big folders,
+describe the folder in an `_index.md` and the agent always reads it.
+
+Configuration via environment variables, set before starting the server:
 
 | Variable            | Default          | Meaning                                        |
 | ------------------- | ---------------- | ---------------------------------------------- |
 | `ANTHROPIC_API_KEY` | —                | Anthropic API key (or log in with `ant auth login`) |
 | `LLM_PROVIDER`      | `anthropic`      | Which provider adapter to use (`anthropic` or `echo`) |
-| `LLM_MODEL`         | `claude-opus-4-8`| Model for the Anthropic provider               |
+| `LLM_MODEL`         | `claude-opus-4-8`| Model for the Anthropic provider (`claude-sonnet-5` is a faster/cheaper option) |
+| `LLM_EFFORT`        | `low`            | Reasoning depth: `low` = fast chat replies, `medium`/`high` = slower but deeper |
 
 `LLM_PROVIDER=echo` needs no credentials and just echoes back — handy for
 developing offline. Chat history is stored per folder in SQLite.

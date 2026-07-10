@@ -86,9 +86,11 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 
 - [ ] Add embeddings + vector search in SQLite (for folders too big for context)
 - [ ] Retrieve only relevant files instead of dumping everything
-- [x] Let the agent *propose* edits to files (propose_file_edit tool; full-file rewrites)
-- [x] Require explicit user confirmation before any file is written (Apply/Dismiss cards in chat; proposals persist in chat history)
+- [x] Let the agent edit files (propose_file_edit tool; full-file rewrites)
+- [x] ~~Require explicit user confirmation~~ → changed to: edits apply directly, with one-click Undo (previous contents stored per edit)
 - [x] @file references in chat with autocomplete (pulls out-of-scope files into context)
+- [x] Lean context: folder map always; full contents only when small / referenced / open / `_index.md` (replaces whole-folder-in-context)
+- [ ] Obsidian-style knowledge graph: wiki-links between notes, link index in SQLite, graph traversal for the agent
 
 ## Phase 5 — Polish  [later]
 

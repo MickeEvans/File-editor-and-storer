@@ -550,54 +550,75 @@ function renderProposalCard(messageId, index, proposal) {
   card.append(head, details);
 
   const setStatus = (status) => {
-    statusEl.textContent = status === "applied" ? "✓ applied" : status;
+    statusEl.textContent =
+      status === "applied" ? "✓ applied" :
+      status === "blocked" ? `blocked: ${proposal.error || ""}` : status;
     statusEl.classList.toggle("applied", status === "applied");
   };
 
-  if (proposal.status === "pending") {
+  const addActions = (buttons) => {
     const actions = document.createElement("div");
     actions.className = "proposal-actions";
-    const applyBtn = document.createElement("button");
-    applyBtn.className = "apply-btn";
-    applyBtn.textContent = "Apply";
-    const dismissBtn = document.createElement("button");
-    dismissBtn.textContent = "Dismiss";
-    actions.append(applyBtn, dismissBtn);
+    const els = buttons.map(([label, cls]) => {
+      const b = document.createElement("button");
+      b.textContent = label;
+      if (cls) b.className = cls;
+      actions.appendChild(b);
+      return b;
+    });
     card.appendChild(actions);
+    return [actions, els];
+  };
 
-    const act = async (action) => {
-      applyBtn.disabled = dismissBtn.disabled = true;
-      try {
-        const res = await api("/api/chat/proposal", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message_id: messageId, index, action }),
-        });
-        setStatus(res.status);
-        actions.remove();
-        if (action === "apply") {
-          await loadTree();
-          // If the edited file is open, reload it from disk
-          if (openPath === res.path) {
-            const item = [...document.querySelectorAll(".tree-item.file")]
-              .find((i) => i.dataset.path === res.path);
-            setDirty(false); // disk now holds the agent's version
-            if (item) item.click();
-          }
-        }
-      } catch (err) {
-        applyBtn.disabled = dismissBtn.disabled = false;
-        setStatus(`error: ${err.message}`);
+  const act = async (action, actions, els) => {
+    els.forEach((b) => (b.disabled = true));
+    try {
+      const res = await api("/api/chat/proposal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message_id: messageId, index, action }),
+      });
+      proposal.status = res.status;
+      setStatus(res.status);
+      actions.remove();
+      if (action === "apply" || action === "undo") {
+        await afterAgentEdit([{ path: res.path, status: "applied" }]);
       }
-    };
-    applyBtn.addEventListener("click", () => act("apply"));
-    dismissBtn.addEventListener("click", () => act("dismiss"));
-    setStatus("pending");
-  } else {
-    setStatus(proposal.status);
+      if (res.status === "applied") wireUndo(); // legacy apply can still be undone
+    } catch (err) {
+      els.forEach((b) => (b.disabled = false));
+      setStatus(`error: ${err.message}`);
+    }
+  };
+
+  function wireUndo() {
+    const [actions, [undoBtn]] = addActions([["Undo", ""]]);
+    undoBtn.addEventListener("click", () => act("undo", actions, [undoBtn]));
   }
 
+  if (proposal.status === "applied") {
+    wireUndo();
+  } else if (proposal.status === "pending") {
+    // Older proposals from before edits became direct
+    const [actions, [applyBtn, dismissBtn]] = addActions([["Apply", "apply-btn"], ["Dismiss", ""]]);
+    applyBtn.addEventListener("click", () => act("apply", actions, [applyBtn, dismissBtn]));
+    dismissBtn.addEventListener("click", () => act("dismiss", actions, [applyBtn, dismissBtn]));
+  }
+  setStatus(proposal.status);
+
   return card;
+}
+
+// Refresh the tree and reload the open file after agent edits touch disk
+async function afterAgentEdit(proposals) {
+  await loadTree();
+  const editedOpen = proposals.some((p) => p.status === "applied" && p.path === openPath);
+  if (editedOpen) {
+    const item = [...document.querySelectorAll(".tree-item.file")]
+      .find((i) => i.dataset.path === openPath);
+    setDirty(false); // disk now holds the agent's version
+    if (item) item.click();
+  }
 }
 
 function addChatMessage(msg) {
@@ -632,18 +653,21 @@ async function sendChat(text) {
   chatBusy = true;
   chatSendBtn.disabled = true;
   addChatBubble("user", text);
-  const pending = addChatBubble("assistant pending", "Reading the folder…");
+  const pending = addChatBubble("assistant pending", "Thinking…");
   try {
     const reply = await api("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ folder: chatScope, message: text }),
+      body: JSON.stringify({ folder: chatScope, message: text, open_file: openPath }),
     });
     pending.className = "chat-msg assistant";
     pending.textContent = reply.content;
     (reply.proposals || []).forEach((p, i) => {
       chatMessagesEl.appendChild(renderProposalCard(reply.id, i, p));
     });
+    if ((reply.proposals || []).some((p) => p.status === "applied")) {
+      await afterAgentEdit(reply.proposals);
+    }
   } catch (err) {
     pending.className = "chat-msg error";
     pending.textContent = err.message;

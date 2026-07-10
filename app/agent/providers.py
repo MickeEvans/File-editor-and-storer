@@ -67,6 +67,9 @@ class AnthropicProvider(LLMProvider):
         # or an `ant auth login` profile from the environment.
         self.client = anthropic.Anthropic()
         self.model = model or os.environ.get("LLM_MODEL", "claude-opus-4-8")
+        # "low" keeps replies chat-window fast; raise via LLM_EFFORT=medium/high
+        # when you want deeper thinking over speed.
+        self.effort = os.environ.get("LLM_EFFORT", "low")
 
     def complete(self, system: str, messages: list[dict]) -> AgentReply:
         try:
@@ -74,9 +77,10 @@ class AnthropicProvider(LLMProvider):
             # avoids HTTP timeouts on long responses.
             with self.client.messages.stream(
                 model=self.model,
-                max_tokens=64000,
+                max_tokens=16000,
                 system=system,
                 thinking={"type": "adaptive"},
+                output_config={"effort": self.effort},
                 tools=[PROPOSE_EDIT_TOOL],
                 messages=messages,
             ) as stream:

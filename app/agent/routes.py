@@ -37,6 +37,7 @@ def resolve_folder(folder: str) -> Path:
 class ChatRequest(BaseModel):
     folder: str = ""  # relative to workspace root; "" = whole workspace
     message: str
+    open_file: str | None = None  # file currently open in the editor, if any
 
 
 def extract_referenced_files(message: str, session) -> list[Path]:
@@ -88,11 +89,38 @@ def send_message(req: ChatRequest):
         model_messages.append({"role": "user", "content": req.message})
 
         referenced = extract_referenced_files(req.message, session)
-        system = build_folder_context(target, referenced=referenced)
+        open_file = None
+        if req.open_file:
+            try:
+                open_file = resolve_in_workspace(req.open_file)
+            except HTTPException:
+                open_file = None
+        system = build_folder_context(target, referenced=referenced, open_file=open_file)
         try:
             reply = get_provider().complete(system, model_messages)
         except ProviderError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
+
+        # Apply the agent's edits immediately; each one keeps the previous
+        # contents so the user can undo with one click.
+        applied_any = False
+        for proposal in reply.proposals:
+            try:
+                target_file = resolve_in_workspace(proposal["path"])
+                if target_file.is_dir():
+                    raise HTTPException(status_code=400, detail="Path is a folder")
+                proposal["previous"] = (
+                    target_file.read_text(encoding="utf-8") if target_file.is_file() else None
+                )
+                target_file.parent.mkdir(parents=True, exist_ok=True)
+                target_file.write_text(proposal["content"], encoding="utf-8")
+                proposal["status"] = "applied"
+                applied_any = True
+            except HTTPException as exc:
+                proposal["status"] = "blocked"
+                proposal["error"] = exc.detail
+        if applied_any:
+            scan_workspace()
 
         now = time.time()
         session.add(ChatMessage(folder=req.folder, role="user", content=req.message, created_at=now))
@@ -113,14 +141,14 @@ def send_message(req: ChatRequest):
 class ProposalAction(BaseModel):
     message_id: int
     index: int  # which proposal in the message
-    action: str  # "apply" | "dismiss"
+    action: str  # "undo" | "apply" | "dismiss" (last two for legacy pending cards)
 
 
 @router.post("/proposal")
 def act_on_proposal(req: ProposalAction):
-    """Apply (write to disk) or dismiss a proposed file edit."""
-    if req.action not in ("apply", "dismiss"):
-        raise HTTPException(status_code=400, detail="action must be apply or dismiss")
+    """Undo an applied agent edit (or apply/dismiss a legacy pending one)."""
+    if req.action not in ("undo", "apply", "dismiss"):
+        raise HTTPException(status_code=400, detail="action must be undo, apply or dismiss")
 
     session = SessionLocal()
     try:
@@ -132,18 +160,34 @@ def act_on_proposal(req: ProposalAction):
         if not 0 <= req.index < len(proposals):
             raise HTTPException(status_code=404, detail="No such proposal")
         proposal = proposals[req.index]
-        if proposal["status"] != "pending":
-            raise HTTPException(status_code=409, detail=f"Already {proposal['status']}")
 
-        if req.action == "apply":
+        if req.action == "undo":
+            if proposal["status"] != "applied":
+                raise HTTPException(status_code=409, detail=f"Can't undo: {proposal['status']}")
+            target = resolve_in_workspace(proposal["path"])
+            previous = proposal.get("previous")
+            if previous is None:
+                # The edit created this file — undo removes it
+                if target.is_file():
+                    target.unlink()
+            else:
+                target.write_text(previous, encoding="utf-8")
+            scan_workspace()
+            proposal["status"] = "undone"
+        elif req.action == "apply":
+            if proposal["status"] != "pending":
+                raise HTTPException(status_code=409, detail=f"Already {proposal['status']}")
             target = resolve_in_workspace(proposal["path"])
             if target.is_dir():
                 raise HTTPException(status_code=400, detail="Path is a folder")
+            proposal["previous"] = target.read_text(encoding="utf-8") if target.is_file() else None
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(proposal["content"], encoding="utf-8")
             scan_workspace()
             proposal["status"] = "applied"
         else:
+            if proposal["status"] != "pending":
+                raise HTTPException(status_code=409, detail=f"Already {proposal['status']}")
             proposal["status"] = "dismissed"
 
         row.extra = json.dumps(extra)
