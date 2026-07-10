@@ -160,6 +160,38 @@ html, body {
 .tree-children { display: block; }
 .tree-children.collapsed { display: none; }
 
+/* ---------- Panel resizers ---------- */
+
+/* Invisible 8px grab strip straddling the 1px panel border; on hover
+   (or while dragging) a 2px accent line lights up over the border. */
+.resizer {
+  flex: 0 0 8px;
+  margin: 0 -4px;
+  position: relative;
+  z-index: 20;
+  cursor: col-resize;
+}
+.resizer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  right: 3px;
+  background: transparent;
+  transition: background 0.12s ease 0.15s;
+}
+.resizer:hover::after,
+.resizer.dragging::after { background: var(--accent); transition-delay: 0s; }
+
+/* The chat resizer only exists while the chat panel is open */
+#app:has(> #chat-panel[hidden]) #resizer-chat { display: none; }
+
+/* While dragging: keep the col-resize cursor everywhere, stop text
+   selection, and stop the preview iframe from swallowing the pointer */
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing iframe { pointer-events: none; }
+
 /* ---------- Main pane ---------- */
 
 #main {

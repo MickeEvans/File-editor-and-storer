@@ -845,4 +845,76 @@ rescanBtn.addEventListener("click", async () => {
 // Clicking the workspace title selects the root again
 document.getElementById("workspace-name").addEventListener("click", () => selectFolder(""));
 
+// ---------- Resizable panels ----------
+
+const LAYOUT_KEY = "workspace-layout";
+const MAIN_MIN_WIDTH = 200; // the editor pane never collapses below this
+
+(function initResizers() {
+  const mainEl = document.getElementById("main");
+  const resizers = [
+    {
+      handle: document.getElementById("resizer-sidebar"),
+      panel: document.getElementById("sidebar"),
+      key: "sidebar",
+      min: 180,
+      grows: 1, // dragging right makes this panel wider
+    },
+    {
+      handle: document.getElementById("resizer-chat"),
+      panel: chatPanelEl,
+      key: "chat",
+      min: 260,
+      grows: -1, // dragging right makes this panel narrower
+    },
+  ];
+
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}; } catch { /* corrupt -> defaults */ }
+
+  function persist(key, width) {
+    saved[key] = width;
+    try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(saved)); } catch { /* storage unavailable */ }
+  }
+
+  for (const r of resizers) {
+    if (typeof saved[r.key] === "number") r.panel.style.width = `${saved[r.key]}px`;
+
+    r.handle.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      r.handle.setPointerCapture(e.pointerId);
+      r.handle.classList.add("dragging");
+      document.body.classList.add("resizing");
+
+      const startX = e.clientX;
+      const startWidth = r.panel.offsetWidth;
+      // Whatever this panel gains comes out of the main pane
+      const maxWidth = startWidth + mainEl.offsetWidth - MAIN_MIN_WIDTH;
+
+      const onMove = (ev) => {
+        const wanted = startWidth + (ev.clientX - startX) * r.grows;
+        r.panel.style.width = `${Math.min(maxWidth, Math.max(r.min, wanted))}px`;
+      };
+      const onUp = () => {
+        r.handle.classList.remove("dragging");
+        document.body.classList.remove("resizing");
+        r.handle.removeEventListener("pointermove", onMove);
+        r.handle.removeEventListener("pointerup", onUp);
+        r.handle.removeEventListener("pointercancel", onUp);
+        persist(r.key, r.panel.offsetWidth);
+      };
+      r.handle.addEventListener("pointermove", onMove);
+      r.handle.addEventListener("pointerup", onUp);
+      r.handle.addEventListener("pointercancel", onUp);
+    });
+
+    // Double-click snaps the panel back to its stylesheet default
+    r.handle.addEventListener("dblclick", () => {
+      r.panel.style.width = "";
+      delete saved[r.key];
+      try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(saved)); } catch { /* storage unavailable */ }
+    });
+  }
+})();
+
 loadTree();
