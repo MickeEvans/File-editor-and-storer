@@ -20,6 +20,39 @@ from .database import FileRecord, SessionLocal, engine
 MAX_INDEXED_SIZE = 512_000
 WIKI_LINK_RE = re.compile(r"\[\[([^\]|#\n]+)(?:[#|][^\]]*)?\]\]")
 
+# Obsidian-style inline tags: #tag, #nested/tag, #multi-word-tag. Must start
+# with a letter (so "# Heading" and "#123" don't count) and not be glued to
+# a preceding word character or another #.
+INLINE_TAG_RE = re.compile(r"(?<![\w#])#([A-Za-zÅÄÖåäöÜü][\w/\-]*)")
+FRONTMATTER_TAGS_RE = re.compile(
+    r"^tags:\s*(?:\[([^\]]*)\]|(.+))$", re.MULTILINE | re.IGNORECASE
+)
+
+
+def extract_tags(content: str) -> set[str]:
+    """Tags for one markdown file: frontmatter `tags:` plus inline #tags
+    outside code fences. Normalized to lowercase."""
+    tags: set[str] = set()
+
+    body = content
+    if content.startswith("---\n"):
+        end = content.find("\n---", 4)
+        if end != -1:
+            frontmatter = content[4:end]
+            body = content[end + 4:]
+            m = FRONTMATTER_TAGS_RE.search(frontmatter)
+            if m:
+                raw = m.group(1) if m.group(1) is not None else m.group(2)
+                tags.update(
+                    t.strip().strip("#\"'").lower()
+                    for t in raw.split(",") if t.strip().strip("#\"'")
+                )
+
+    # Drop fenced code blocks so `#include` etc. don't become tags
+    body = re.sub(r"```.*?```", "", body, flags=re.DOTALL)
+    tags.update(m.group(1).lower() for m in INLINE_TAG_RE.finditer(body))
+    return tags
+
 # Folders that should never be indexed or shown in the tree.
 IGNORED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 
@@ -42,9 +75,10 @@ def iter_workspace_files(root: Path):
 
 
 def _index_content(conn, rel: str, path: Path) -> None:
-    """(Re)build the FTS row and outgoing wiki-links for one file."""
+    """(Re)build the FTS row, outgoing wiki-links, and tags for one file."""
     conn.execute(sql("DELETE FROM files_fts WHERE path = :p"), {"p": rel})
     conn.execute(sql("DELETE FROM note_links WHERE src = :p"), {"p": rel})
+    conn.execute(sql("DELETE FROM file_tags WHERE path = :p"), {"p": rel})
     try:
         if path.stat().st_size > MAX_INDEXED_SIZE:
             return
@@ -57,6 +91,10 @@ def _index_content(conn, rel: str, path: Path) -> None:
             conn.execute(
                 sql("INSERT INTO note_links (src, target, resolved) VALUES (:s, :t, NULL)"),
                 {"s": rel, "t": target},
+            )
+        for tag in extract_tags(content):
+            conn.execute(
+                sql("INSERT INTO file_tags (path, tag) VALUES (:p, :t)"), {"p": rel, "t": tag}
             )
 
 
@@ -129,6 +167,7 @@ def scan_workspace() -> dict:
         for rel in removed_paths:
             conn.execute(sql("DELETE FROM files_fts WHERE path = :p"), {"p": rel})
             conn.execute(sql("DELETE FROM note_links WHERE src = :p"), {"p": rel})
+            conn.execute(sql("DELETE FROM file_tags WHERE path = :p"), {"p": rel})
         for rel, path in changed:
             _index_content(conn, rel, path)
         if changed or removed_paths:

@@ -1,12 +1,15 @@
 // Frontend. Markdown -> EasyMDE with side-by-side preview.
 // HTML -> text editor with a Code/Preview toggle (sandboxed iframe).
 // CSV -> text editor with a Text/Grid toggle (editable table).
-// Everything else -> plain text editor. All views save back to disk.
+// PDF -> read-only viewer (browser's built-in renderer).
+// Everything else (incl. .txt) -> plain text editor. All editable views
+// save back to disk.
 
 const treeEl = document.getElementById("tree");
 const editorPaneEl = document.getElementById("editor-pane");
 const textEditorEl = document.getElementById("text-editor");
 const htmlPreviewEl = document.getElementById("html-preview");
+const pdfViewerEl = document.getElementById("pdf-viewer");
 const gridPaneEl = document.getElementById("grid-pane");
 const csvGridEl = document.getElementById("csv-grid");
 const emptyStateEl = document.getElementById("empty-state");
@@ -120,12 +123,108 @@ async function loadTree() {
   }
 }
 
+// ---------- Workspace search ----------
+
+const searchInputEl = document.getElementById("search-input");
+const searchResultsEl = document.getElementById("search-results");
+const fileTagsEl = document.getElementById("file-tags");
+let searchTimer = null;
+
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+// Snippets mark matches with \x02…\x03 (set server-side) so we can escape
+// the content first and only then inject the highlight tags.
+function snippetHtml(snippet) {
+  return escapeHtml(snippet).replace(/\u0002/g, "<mark>").replace(/\u0003/g, "</mark>");
+}
+
+function showSearchResults(show) {
+  searchResultsEl.hidden = !show;
+  treeEl.hidden = show;
+}
+
+async function runSearch(query) {
+  if (!query.trim()) {
+    showSearchResults(false);
+    return;
+  }
+  let data;
+  try {
+    data = await api(`/api/search?q=${encodeURIComponent(query)}`);
+  } catch (err) {
+    searchResultsEl.innerHTML = `<div class="sr-empty">Search failed: ${escapeHtml(err.message)}</div>`;
+    showSearchResults(true);
+    return;
+  }
+  if (query !== searchInputEl.value) return; // stale response; a newer search is underway
+
+  searchResultsEl.innerHTML = "";
+  if (data.results.length === 0) {
+    searchResultsEl.innerHTML = '<div class="sr-empty">No matches.</div>';
+  }
+  for (const r of data.results) {
+    const div = document.createElement("div");
+    div.className = "search-result";
+    const name = r.path.split("/").pop();
+    div.innerHTML =
+      `<div class="sr-name">${escapeHtml(name)} <span class="badge ${r.type}">${r.type}</span></div>` +
+      `<div class="sr-path">${escapeHtml(r.path)}</div>` +
+      (r.snippet ? `<div class="sr-snippet">${snippetHtml(r.snippet)}</div>` : "");
+    div.addEventListener("click", () => {
+      const item = [...document.querySelectorAll(".tree-item.file")]
+        .find((i) => i.dataset.path === r.path);
+      if (item) item.click(); // results stay visible for clicking through hits
+    });
+    searchResultsEl.appendChild(div);
+  }
+  showSearchResults(true);
+}
+
+searchInputEl.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => runSearch(searchInputEl.value), 200);
+});
+searchInputEl.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    searchInputEl.value = "";
+    showSearchResults(false);
+    searchInputEl.blur();
+  } else if (e.key === "Enter") {
+    clearTimeout(searchTimer);
+    runSearch(searchInputEl.value);
+  }
+});
+
+function searchForTag(tag) {
+  searchInputEl.value = `#${tag}`;
+  runSearch(searchInputEl.value);
+  searchInputEl.focus();
+}
+
+// Tag chips for the open file, shown next to its name in the tab bar
+function renderFileTags(tags) {
+  fileTagsEl.innerHTML = "";
+  for (const tag of tags || []) {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    chip.textContent = `#${tag}`;
+    chip.title = `Show files tagged #${tag}`;
+    chip.addEventListener("click", () => searchForTag(tag));
+    fileTagsEl.appendChild(chip);
+  }
+}
+
 // ---------- Panes & views ----------
 
-const PANES = { empty: emptyStateEl, editor: editorPaneEl, text: textEditorEl, preview: htmlPreviewEl, grid: gridPaneEl };
+const graphPaneEl = document.getElementById("graph-pane");
+const PANES = { empty: emptyStateEl, editor: editorPaneEl, text: textEditorEl, preview: htmlPreviewEl, grid: gridPaneEl, pdf: pdfViewerEl, graph: graphPaneEl };
 
 function showPane(name) {
   for (const [key, el] of Object.entries(PANES)) el.hidden = key !== name;
+  document.getElementById("graph-btn").classList.toggle("open", name === "graph");
+  if (name !== "graph") stopGraphLoop();
 }
 
 function setTab(path, type) {
@@ -214,6 +313,26 @@ toggleBBtn.addEventListener("click", () => {
 async function openFile(node, item) {
   if (dirty && !confirm("You have unsaved changes. Discard them?")) return;
 
+  // PDFs are binary and read-only: point the viewer straight at the raw
+  // bytes instead of fetching text content.
+  if (node.type === "pdf") {
+    if (activeItem) activeItem.classList.remove("active");
+    item.classList.add("active");
+    activeItem = item;
+    setTab(node.path, "pdf");
+    renderFileTags([]);
+    openPath = null; // nothing editable is open
+    openType = "pdf";
+    savedContent = "";
+    setDirty(false);
+    saveBtn.hidden = true;
+    viewToggleEl.hidden = true;
+    selectFolder(scopeOf(node.path));
+    pdfViewerEl.src = `/api/file/raw?path=${encodeURIComponent(node.path)}`;
+    showPane("pdf");
+    return;
+  }
+
   let data;
   try {
     data = await api(`/api/file?path=${encodeURIComponent(node.path)}`);
@@ -229,6 +348,7 @@ async function openFile(node, item) {
   item.classList.add("active");
   activeItem = item;
   setTab(data.path, data.type);
+  renderFileTags(data.tags);
 
   openPath = null; // silence change listeners while swapping content
   openType = data.type;
@@ -411,7 +531,7 @@ let createMode = null; // "file" | "folder" | null
 const CREATE_CONFIG = {
   file: {
     placeholder: "task-1/notes.md",
-    hint: "New file — e.g. notes.md, deck.html, data.csv. Enter to create, Esc to cancel.",
+    hint: "New file — e.g. notes.md, todo.txt, deck.html, data.csv. Enter to create, Esc to cancel.",
   },
   folder: {
     placeholder: "task-1",
@@ -844,6 +964,406 @@ rescanBtn.addEventListener("click", async () => {
 
 // Clicking the workspace title selects the root again
 document.getElementById("workspace-name").addEventListener("click", () => selectFolder(""));
+
+// ---------- Settings modal ----------
+
+const settingsOverlayEl = document.getElementById("settings-overlay");
+const settingsBtn = document.getElementById("settings-btn");
+const settingsCloseBtn = document.getElementById("settings-close-btn");
+const workspaceListEl = document.getElementById("workspace-list");
+const addWorkspaceBtn = document.getElementById("settings-add-workspace-btn");
+const providerSelectEl = document.getElementById("provider-select");
+const providerNoteEl = document.getElementById("provider-note");
+
+function wsName(root) {
+  return root.split(/[\\/]/).filter(Boolean).pop() || root;
+}
+
+async function switchWorkspace(root) {
+  if (dirty && !confirm("You have unsaved changes. Discard them?")) return;
+  try {
+    await api("/api/workspace/switch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ root }),
+    });
+  } catch (err) {
+    providerNoteEl.textContent = ""; // errors surface in the sidebar, not here
+    showSidebarError(`Could not switch workspace: ${err.message}`);
+    return;
+  }
+  resetWorkspaceState();
+  await loadTree();
+  await renderSettings();
+}
+
+function renderWorkspaceList(settings) {
+  workspaceListEl.innerHTML = "";
+  for (const root of settings.workspaces) {
+    const current = root === settings.workspace.root;
+    const item = document.createElement("div");
+    item.className = "workspace-item" + (current ? " current" : "");
+    item.title = current ? "The active workspace" : `Switch to ${root}`;
+
+    const info = document.createElement("div");
+    info.className = "ws-info";
+    info.innerHTML =
+      `<div class="ws-name">${escapeHtml(wsName(root))}${current ? " · active" : ""}</div>` +
+      `<div class="ws-path">${escapeHtml(root)}</div>`;
+    item.appendChild(info);
+
+    if (!current) {
+      const forget = document.createElement("button");
+      forget.className = "ws-forget";
+      forget.textContent = "forget";
+      forget.title = "Remove from this list (the folder itself is untouched)";
+      forget.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await api("/api/workspace/forget", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ root }),
+        });
+        renderSettings();
+      });
+      item.appendChild(forget);
+      item.addEventListener("click", () => switchWorkspace(root));
+    }
+    workspaceListEl.appendChild(item);
+  }
+}
+
+async function renderSettings() {
+  const settings = await api("/api/settings");
+  renderWorkspaceList(settings);
+
+  providerSelectEl.innerHTML = "";
+  for (const p of settings.providers) {
+    const opt = document.createElement("option");
+    opt.value = p;
+    opt.textContent = p === "anthropic" ? "Anthropic (Claude)" : `${p} (offline dev stub)`;
+    providerSelectEl.appendChild(opt);
+  }
+  providerSelectEl.value = settings.provider;
+  providerSelectEl.disabled = settings.provider_locked_by_env;
+  providerNoteEl.textContent = settings.provider_locked_by_env
+    ? "Locked by the LLM_PROVIDER environment variable for this server."
+    : "Takes effect on the agent's next message — no restart needed.";
+}
+
+providerSelectEl.addEventListener("change", async () => {
+  try {
+    await api("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider: providerSelectEl.value }),
+    });
+    providerNoteEl.textContent = `Agent now uses ${providerSelectEl.value}.`;
+  } catch (err) {
+    providerNoteEl.textContent = `Could not change provider: ${err.message}`;
+  }
+});
+
+addWorkspaceBtn.addEventListener("click", async () => {
+  if (dirty && !confirm("You have unsaved changes. Discard them?")) return;
+  addWorkspaceBtn.disabled = true;
+  try {
+    const res = await api("/api/workspace/pick", { method: "POST" });
+    if (!res.cancelled) {
+      resetWorkspaceState();
+      await loadTree();
+      await renderSettings();
+    }
+  } catch (err) {
+    showSidebarError(`Could not add workspace: ${err.message}`);
+  } finally {
+    addWorkspaceBtn.disabled = false;
+  }
+});
+
+function openSettings() {
+  settingsOverlayEl.hidden = false;
+  renderSettings().catch((err) => {
+    workspaceListEl.innerHTML =
+      `<div class="settings-note">Could not load settings: ${escapeHtml(err.message)}</div>`;
+  });
+}
+function closeSettings() { settingsOverlayEl.hidden = true; }
+
+settingsBtn.addEventListener("click", openSettings);
+settingsCloseBtn.addEventListener("click", closeSettings);
+settingsOverlayEl.addEventListener("click", (e) => {
+  if (e.target === settingsOverlayEl) closeSettings();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !settingsOverlayEl.hidden) closeSettings();
+});
+
+// ---------- Graph view (wiki-link graph on a canvas) ----------
+
+const graphBtn = document.getElementById("graph-btn");
+const graphCanvas = document.getElementById("graph-canvas");
+const graphEmptyEl = document.getElementById("graph-empty");
+const gctx = graphCanvas.getContext("2d");
+
+const gState = {
+  nodes: [],            // {id,label,type,ghost,x,y,vx,vy,degree}
+  edges: [],            // {a,b} node references
+  byId: new Map(),
+  tx: 0, ty: 0, k: 1,   // pan/zoom transform (screen = world*k + t)
+  alpha: 0,             // simulation heat; loop stops when it cools
+  raf: null,
+  hover: null,
+  dragNode: null,
+  panning: false,
+  pointerDownAt: null,
+};
+let paneBeforeGraph = "empty";
+
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+async function loadGraph() {
+  const data = await api("/api/graph");
+  const old = gState.byId;
+  gState.byId = new Map();
+  gState.nodes = data.nodes.map((n, i) => {
+    const prev = old.get(n.id);
+    const angle = (i / Math.max(1, data.nodes.length)) * Math.PI * 2;
+    const node = {
+      ...n,
+      x: prev ? prev.x : Math.cos(angle) * 160 + Math.random() * 40,
+      y: prev ? prev.y : Math.sin(angle) * 160 + Math.random() * 40,
+      vx: 0, vy: 0, degree: 0,
+    };
+    gState.byId.set(n.id, node);
+    return node;
+  });
+  gState.edges = data.edges
+    .map((e) => ({ a: gState.byId.get(e.source), b: gState.byId.get(e.target) }))
+    .filter((e) => e.a && e.b);
+  for (const e of gState.edges) { e.a.degree++; e.b.degree++; }
+  graphEmptyEl.hidden = gState.nodes.length > 0;
+}
+
+function sizeGraphCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = graphPaneEl.clientWidth, h = graphPaneEl.clientHeight;
+  graphCanvas.width = w * dpr;
+  graphCanvas.height = h * dpr;
+  gctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function graphTick() {
+  const N = gState.nodes;
+  // Pairwise repulsion (fine at note-collection scale)
+  for (let i = 0; i < N.length; i++) {
+    for (let j = i + 1; j < N.length; j++) {
+      const a = N[i], b = N[j];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d2 = dx * dx + dy * dy || 1;
+      const f = 1800 / d2;
+      const d = Math.sqrt(d2);
+      dx /= d; dy /= d;
+      a.vx -= dx * f; a.vy -= dy * f;
+      b.vx += dx * f; b.vy += dy * f;
+    }
+  }
+  // Springs along edges
+  for (const { a, b } of gState.edges) {
+    let dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const f = (d - 90) * 0.02;
+    dx /= d; dy /= d;
+    a.vx += dx * f; a.vy += dy * f;
+    b.vx -= dx * f; b.vy -= dy * f;
+  }
+  // Gentle pull to the center + integration with damping
+  for (const n of N) {
+    n.vx -= n.x * 0.004; n.vy -= n.y * 0.004;
+    if (n !== gState.dragNode) {
+      n.x += n.vx * gState.alpha; n.y += n.vy * gState.alpha;
+    }
+    n.vx *= 0.6; n.vy *= 0.6;
+  }
+  gState.alpha *= 0.995;
+}
+
+function nodeRadius(n) { return 4 + Math.sqrt(n.degree) * 2.2; }
+
+function drawGraph() {
+  const w = graphPaneEl.clientWidth, h = graphPaneEl.clientHeight;
+  gctx.clearRect(0, 0, w, h);
+  gctx.fillStyle = cssVar("--bg");
+  gctx.fillRect(0, 0, w, h);
+
+  const { tx, ty, k, hover } = gState;
+  const toX = (x) => x * k + tx + w / 2;
+  const toY = (y) => y * k + ty + h / 2;
+  const neighbors = new Set();
+  if (hover) {
+    neighbors.add(hover);
+    for (const { a, b } of gState.edges) {
+      if (a === hover) neighbors.add(b);
+      if (b === hover) neighbors.add(a);
+    }
+  }
+
+  const colors = {
+    markdown: cssVar("--accent"),
+    text: cssVar("--badge-text"),
+    slides: cssVar("--badge-slides"),
+    data: cssVar("--badge-data"),
+    pdf: cssVar("--badge-pdf"),
+    other: cssVar("--badge-other"),
+  };
+
+  for (const { a, b } of gState.edges) {
+    const lit = hover && (a === hover || b === hover);
+    gctx.strokeStyle = lit ? cssVar("--accent") : cssVar("--border");
+    gctx.globalAlpha = hover && !lit ? 0.25 : 1;
+    gctx.lineWidth = lit ? 1.5 : 1;
+    gctx.beginPath();
+    gctx.moveTo(toX(a.x), toY(a.y));
+    gctx.lineTo(toX(b.x), toY(b.y));
+    gctx.stroke();
+  }
+
+  for (const n of gState.nodes) {
+    const r = nodeRadius(n) * k;
+    const faded = hover && !neighbors.has(n);
+    gctx.globalAlpha = faded ? 0.25 : 1;
+    gctx.beginPath();
+    gctx.arc(toX(n.x), toY(n.y), Math.max(2, r), 0, Math.PI * 2);
+    if (n.ghost) {
+      gctx.strokeStyle = cssVar("--text-dim");
+      gctx.lineWidth = 1;
+      gctx.stroke();
+    } else {
+      gctx.fillStyle = colors[n.type] || colors.other;
+      gctx.fill();
+    }
+    if (k > 0.55 || n === hover) {
+      gctx.fillStyle = n === hover ? cssVar("--text") : cssVar("--text-dim");
+      gctx.font = `${n === hover ? "600 " : ""}11px "Segoe UI", sans-serif`;
+      gctx.textAlign = "center";
+      gctx.fillText(n.label, toX(n.x), toY(n.y) + Math.max(2, r) + 12);
+    }
+  }
+  gctx.globalAlpha = 1;
+}
+
+function graphLoop() {
+  if (gState.alpha > 0.02 || gState.dragNode) graphTick();
+  drawGraph();
+  gState.raf = requestAnimationFrame(graphLoop);
+}
+
+function startGraphLoop() {
+  if (gState.raf === null) gState.raf = requestAnimationFrame(graphLoop);
+}
+function stopGraphLoop() {
+  if (gState.raf !== null) { cancelAnimationFrame(gState.raf); gState.raf = null; }
+}
+
+function graphHitTest(mx, my) {
+  const w = graphPaneEl.clientWidth, h = graphPaneEl.clientHeight;
+  for (let i = gState.nodes.length - 1; i >= 0; i--) {
+    const n = gState.nodes[i];
+    const sx = n.x * gState.k + gState.tx + w / 2;
+    const sy = n.y * gState.k + gState.ty + h / 2;
+    const r = Math.max(6, nodeRadius(n) * gState.k) + 2;
+    if ((mx - sx) ** 2 + (my - sy) ** 2 <= r * r) return n;
+  }
+  return null;
+}
+
+graphCanvas.addEventListener("pointerdown", (e) => {
+  graphCanvas.setPointerCapture(e.pointerId);
+  const rect = graphCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  gState.pointerDownAt = { x: mx, y: my, moved: false };
+  const hit = graphHitTest(mx, my);
+  if (hit) {
+    gState.dragNode = hit;
+    gState.alpha = Math.max(gState.alpha, 0.5);
+  } else {
+    gState.panning = true;
+    graphCanvas.classList.add("dragging");
+  }
+});
+
+graphCanvas.addEventListener("pointermove", (e) => {
+  const rect = graphCanvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const w = graphPaneEl.clientWidth, h = graphPaneEl.clientHeight;
+
+  if (gState.pointerDownAt) {
+    const dx = mx - gState.pointerDownAt.x, dy = my - gState.pointerDownAt.y;
+    if (dx * dx + dy * dy > 16) gState.pointerDownAt.moved = true;
+  }
+  if (gState.dragNode) {
+    gState.dragNode.x = (mx - w / 2 - gState.tx) / gState.k;
+    gState.dragNode.y = (my - h / 2 - gState.ty) / gState.k;
+    gState.alpha = Math.max(gState.alpha, 0.3);
+  } else if (gState.panning) {
+    gState.tx += e.movementX;
+    gState.ty += e.movementY;
+  } else {
+    gState.hover = graphHitTest(mx, my);
+    graphCanvas.style.cursor = gState.hover && !gState.hover.ghost ? "pointer" : "grab";
+  }
+});
+
+graphCanvas.addEventListener("pointerup", (e) => {
+  const clicked = gState.pointerDownAt && !gState.pointerDownAt.moved && gState.dragNode;
+  const node = gState.dragNode;
+  gState.dragNode = null;
+  gState.panning = false;
+  gState.pointerDownAt = null;
+  graphCanvas.classList.remove("dragging");
+  if (clicked && node && !node.ghost) {
+    const item = [...document.querySelectorAll(".tree-item.file")]
+      .find((i) => i.dataset.path === node.id);
+    if (item) item.click(); // leaves the graph via showPane
+  }
+});
+
+graphCanvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const rect = graphCanvas.getBoundingClientRect();
+  const w = graphPaneEl.clientWidth, h = graphPaneEl.clientHeight;
+  const mx = e.clientX - rect.left - w / 2, my = e.clientY - rect.top - h / 2;
+  const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+  const k = Math.min(4, Math.max(0.2, gState.k * factor));
+  // Keep the point under the cursor fixed while zooming
+  gState.tx = mx - ((mx - gState.tx) / gState.k) * k;
+  gState.ty = my - ((my - gState.ty) / gState.k) * k;
+  gState.k = k;
+}, { passive: false });
+
+window.addEventListener("resize", () => {
+  if (!graphPaneEl.hidden) sizeGraphCanvas();
+});
+
+graphBtn.addEventListener("click", async () => {
+  if (!graphPaneEl.hidden) {           // toggle off -> back to what was there
+    showPane(paneBeforeGraph);
+    return;
+  }
+  paneBeforeGraph = Object.entries(PANES).find(([, el]) => !el.hidden)?.[0] || "empty";
+  try {
+    await loadGraph();
+  } catch (err) {
+    showSidebarError(`Could not load the graph: ${err.message}`);
+    return;
+  }
+  showPane("graph");
+  sizeGraphCanvas();
+  gState.alpha = 1;
+  startGraphLoop();
+});
 
 // ---------- Resizable panels ----------
 

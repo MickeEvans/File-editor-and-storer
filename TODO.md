@@ -92,13 +92,13 @@ Always keep the app runnable. Do phases in order; within a phase, top to bottom.
 - [x] Lean context: folder map always; full contents only when small / referenced / open / `_index.md` (replaces whole-folder-in-context)
 - [x] Obsidian-style knowledge graph: `[[wiki-links]]` parsed into a note_links table on scan; get_links tool gives the agent outgoing links + backlinks
 
-## Phase 5 — Polish  [later]
+## Phase 5 — Polish  ✔ done
 
-- [ ] Graph view UI (visualize the wiki-link graph, Obsidian-style)
-- [ ] Tags on files
-- [ ] Folder-wide search (backend exists: FTS5 index — needs a search box in the UI)
-- [ ] Settings screen (workspace root, chosen LLM provider)
-- [ ] Support multiple workspaces
+- [x] Graph view UI (visualize the wiki-link graph, Obsidian-style) — canvas force layout behind a Graph button; drag/pan/zoom, ghost nodes for unresolved links, click a note to open it
+- [x] Tags on files — inline #tags + frontmatter `tags:` parsed into a file_tags table on scan; chips in the tab bar; `#tag` filters in search
+- [x] Folder-wide search — search box in the sidebar over the FTS5 index (BM25, snippets, works with #tag filters)
+- [x] Settings screen (workspace root, chosen LLM provider) — gear button in the sidebar; provider switch takes effect on the next agent message (LLM_PROVIDER env var still wins when set)
+- [x] Support multiple workspaces — known-workspaces list in settings.json, one-click switching + forget in the settings screen, chat history namespaced per workspace
 
 ---
 

@@ -60,7 +60,7 @@ def get_history(folder: str = ""):
     try:
         rows = (
             session.query(ChatMessage)
-            .filter_by(folder=folder)
+            .filter_by(folder=folder, workspace=str(config.WORKSPACE_ROOT))
             .order_by(ChatMessage.created_at, ChatMessage.id)
             .all()
         )
@@ -79,7 +79,7 @@ def send_message(req: ChatRequest):
     try:
         history = (
             session.query(ChatMessage)
-            .filter_by(folder=req.folder)
+            .filter_by(folder=req.folder, workspace=str(config.WORKSPACE_ROOT))
             .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
             .limit(HISTORY_TURNS_FOR_MODEL)
             .all()
@@ -109,9 +109,14 @@ def send_message(req: ChatRequest):
             scan_workspace()
 
         now = time.time()
-        session.add(ChatMessage(folder=req.folder, role="user", content=req.message, created_at=now))
+        workspace = str(config.WORKSPACE_ROOT)
+        session.add(ChatMessage(
+            folder=req.folder, workspace=workspace, role="user",
+            content=req.message, created_at=now,
+        ))
         assistant_row = ChatMessage(
             folder=req.folder,
+            workspace=workspace,
             role="assistant",
             content=reply.text,
             created_at=time.time(),
@@ -188,7 +193,11 @@ def clear_history(folder: str = ""):
     resolve_folder(folder)
     session = SessionLocal()
     try:
-        deleted = session.query(ChatMessage).filter_by(folder=folder).delete()
+        deleted = (
+            session.query(ChatMessage)
+            .filter_by(folder=folder, workspace=str(config.WORKSPACE_ROOT))
+            .delete()
+        )
         session.commit()
         return {"deleted": deleted}
     finally:

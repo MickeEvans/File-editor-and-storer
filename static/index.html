@@ -18,9 +18,15 @@
           <button id="add-folder-btn" title="New folder">&#65291; Folder</button>
           <button id="pick-workspace-btn" title="Choose workspace folder&hellip;">&#128194;</button>
           <button id="rescan-btn" title="Re-scan workspace into the index">&#x21bb;</button>
+          <button id="settings-btn" title="Settings">&#9881;</button>
         </span>
       </div>
       <div id="sidebar-error" hidden></div>
+      <div id="search-row">
+        <input id="search-input" type="search" placeholder="Search workspace&hellip; (#tag to filter)"
+               spellcheck="false" autocomplete="off">
+      </div>
+      <div id="search-results" hidden></div>
       <div id="create-row" hidden>
         <input id="create-input" type="text" spellcheck="false" autocomplete="off">
         <div id="create-hint"></div>
@@ -35,6 +41,7 @@
       <div id="tabbar">
         <span id="current-file" class="placeholder">No file open</span>
         <span id="current-type"></span>
+        <span id="file-tags"></span>
         <span id="dirty-dot" hidden title="Unsaved changes">&#9679;</span>
         <div id="tabbar-right">
           <div id="view-toggle" hidden>
@@ -43,21 +50,28 @@
             <button id="toggle-b"></button>
           </div>
           <button id="save-btn" hidden>Save</button>
+          <button id="graph-btn" title="Toggle the wiki-link graph view">Graph</button>
           <button id="chat-toggle-btn" title="Toggle the folder agent">Agent</button>
         </div>
       </div>
       <div id="content">
         <div id="empty-state">
           <h1>Unified Workspace</h1>
-          <p>Notes &middot; Slides &middot; Data — pick a file on the left.</p>
+          <p>Notes &middot; Slides &middot; Data &middot; PDFs — pick a file on the left.</p>
         </div>
         <div id="editor-pane" hidden>
           <textarea id="md-textarea"></textarea>
         </div>
         <textarea id="text-editor" hidden spellcheck="false"></textarea>
         <iframe id="html-preview" hidden sandbox="allow-scripts"></iframe>
+        <iframe id="pdf-viewer" hidden title="PDF preview"></iframe>
         <div id="grid-pane" hidden>
           <table id="csv-grid"></table>
+        </div>
+        <div id="graph-pane" hidden>
+          <canvas id="graph-canvas"></canvas>
+          <div id="graph-empty" hidden>No wiki-links yet — add [[links]] between your notes.</div>
+          <div id="graph-hint">Drag nodes &middot; scroll to zoom &middot; drag background to pan &middot; click a note to open it</div>
         </div>
       </div>
     </main>
@@ -82,6 +96,28 @@
         <button id="chat-send-btn">Send</button>
       </div>
     </aside>
+  </div>
+
+  <div id="settings-overlay" hidden>
+    <div id="settings-modal">
+      <div id="settings-header">
+        <span>Settings</span>
+        <button id="settings-close-btn" title="Close">&#10005;</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Workspaces</div>
+        <div class="settings-note">Click a workspace to switch to it. The active one is highlighted.</div>
+        <div id="workspace-list"></div>
+        <button id="settings-add-workspace-btn">&#65291; Add workspace&hellip;</button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">AI agent provider</div>
+        <select id="provider-select"></select>
+        <div id="provider-note" class="settings-note"></div>
+      </div>
+    </div>
   </div>
 
   <script src="/static/vendor/easymde.min.js"></script>

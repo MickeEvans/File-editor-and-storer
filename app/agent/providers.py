@@ -212,8 +212,11 @@ class EchoProvider(LLMProvider):
 
 
 def get_provider() -> LLMProvider:
-    """Factory behind the adapter. LLM_PROVIDER env var picks the backend."""
-    name = os.environ.get("LLM_PROVIDER", "anthropic").lower()
+    """Factory behind the adapter. The LLM_PROVIDER env var or the settings
+    screen picks the backend (env wins; see config.get_llm_provider)."""
+    from .. import config
+
+    name = config.get_llm_provider()
     if name == "anthropic":
         return AnthropicProvider()
     if name == "echo":
